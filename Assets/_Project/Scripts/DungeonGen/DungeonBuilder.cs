@@ -49,6 +49,27 @@ public class DungeonBuilder : NetworkBehaviour
         return playerSpawnPoints[index % playerSpawnPoints.Count];
     }
 
+    private void Awake()
+    {
+        RegisterPrefabsWithNetworkManager();
+    }
+
+    private void RegisterPrefabsWithNetworkManager()
+    {
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
+        {
+            if (barrelPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(barrelPrefab))
+            {
+                NetworkManager.Singleton.AddNetworkPrefab(barrelPrefab);
+            }
+
+            if (enemyPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(enemyPrefab))
+            {
+                NetworkManager.Singleton.AddNetworkPrefab(enemyPrefab);
+            }
+        }
+    }
+
     public override void OnNetworkSpawn()
     {
         BuildDungeon();

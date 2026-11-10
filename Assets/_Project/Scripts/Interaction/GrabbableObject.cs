@@ -103,9 +103,12 @@ public class GrabbableObject : NetworkBehaviour
 
         if (rb != null)
         {
+            if (!rb.isKinematic)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
             rb.isKinematic = true;
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
         }
 
         SetPhysicsStateClientRpc(true);
@@ -147,15 +150,20 @@ public class GrabbableObject : NetworkBehaviour
     {
         if (rb != null)
         {
-            rb.isKinematic = grabbed;
-            rb.interpolation = grabbed
-                ? RigidbodyInterpolation.None
-                : RigidbodyInterpolation.Interpolate;
-
             if (grabbed)
             {
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
+                if (!rb.isKinematic)
+                {
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+                rb.isKinematic = true;
+                rb.interpolation = RigidbodyInterpolation.None;
+            }
+            else
+            {
+                rb.isKinematic = false;
+                rb.interpolation = RigidbodyInterpolation.Interpolate;
             }
         }
     }

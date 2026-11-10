@@ -76,8 +76,16 @@ public class GrabThrow : NetworkBehaviour
                 Drop();
             }
         }
+    }
 
-        // Keep held object pinned to hold point locally for instant responsiveness
+    private void LateUpdate()
+    {
+        if (!IsOwner)
+        {
+            return;
+        }
+
+        // Keep held object pinned to hold point in LateUpdate (after camera look updates)
         if (heldObject != null && holdPoint != null)
         {
             heldObject.transform.position = holdPoint.position;

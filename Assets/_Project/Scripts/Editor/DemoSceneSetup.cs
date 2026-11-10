@@ -89,6 +89,13 @@ public static class DemoSceneSetup
         networkManager.NetworkConfig = new NetworkConfig();
         networkManager.NetworkConfig.PlayerPrefab = playerPrefab;
 
+        // Assign DefaultNetworkPrefabs list so NGO serializes all prefabs into the scene
+        NetworkPrefabsList defaultList = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>("Assets/DefaultNetworkPrefabs.asset");
+        if (defaultList != null)
+        {
+            networkManager.NetworkConfig.Prefabs.NetworkPrefabsLists.Add(defaultList);
+        }
+
         // Add barrel and enemy as network prefabs
         networkManager.NetworkConfig.Prefabs.Add(new NetworkPrefab { Prefab = barrelPrefab });
         networkManager.NetworkConfig.Prefabs.Add(new NetworkPrefab { Prefab = enemyPrefab });
@@ -181,7 +188,7 @@ public static class DemoSceneSetup
         holdPoint.transform.localPosition = new Vector3(0f, -0.2f, 1.5f);
 
         // Game scripts
-        player.AddComponent<NetworkTransform>();
+        player.AddComponent<OwnerNetworkTransform>();
         PlayerController controller = player.AddComponent<PlayerController>();
         player.AddComponent<RagdollController>();
         player.AddComponent<PlayerHealth>();

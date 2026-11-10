@@ -24,6 +24,12 @@ public class PlayerController : NetworkBehaviour
     [Header("References")]
     [SerializeField] private Transform cameraHolder;
 
+    public NetworkVariable<float> CameraPitch = new NetworkVariable<float>(
+        0f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Owner
+    );
+
     private Rigidbody rb;
     private RagdollController ragdollController;
     private Camera playerCamera;
@@ -40,8 +46,16 @@ public class PlayerController : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        CameraPitch.OnValueChanged += OnCameraPitchChanged;
+
         if (!IsOwner)
         {
+            // Apply current pitch from network on spawn
+            if (cameraHolder != null)
+            {
+                cameraHolder.localRotation = Quaternion.Euler(CameraPitch.Value, 0f, 0f);
+            }
+
             // Disable camera and audio on non-owner instances
             if (playerCamera != null)
             {
@@ -51,16 +65,39 @@ public class PlayerController : NetworkBehaviour
             {
                 audioListener.enabled = false;
             }
+
+            // Non-owners are moved purely by NetworkTransform, so disable local physics
+            if (rb != null)
+            {
+                rb.isKinematic = true;
+            }
             return;
         }
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        // Set up rigidbody for FPS movement
-        rb.freezeRotation = true;
-        rb.interpolation = RigidbodyInterpolation.Interpolate;
-        rb.linearDamping = groundDrag;
+        // Set up rigidbody for FPS movement on owner
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.freezeRotation = true;
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.linearDamping = groundDrag;
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        CameraPitch.OnValueChanged -= OnCameraPitchChanged;
+    }
+
+    private void OnCameraPitchChanged(float previous, float current)
+    {
+        if (!IsOwner && cameraHolder != null)
+        {
+            cameraHolder.localRotation = Quaternion.Euler(current, 0f, 0f);
+        }
     }
 
     private void Update()
@@ -153,6 +190,11 @@ public class PlayerController : NetworkBehaviour
         }
 
         transform.Rotate(Vector3.up * mouseX);
+
+        if (IsSpawned)
+        {
+            CameraPitch.Value = xRotation;
+        }
     }
 
     /// <summary>
@@ -161,6 +203,11 @@ public class PlayerController : NetworkBehaviour
     public void ResetAfterRagdoll(float currentYaw)
     {
         xRotation = 0f;
+
+        if (IsOwner && IsSpawned)
+        {
+            CameraPitch.Value = 0f;
+        }
 
         if (cameraHolder != null)
         {
