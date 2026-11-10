@@ -65,7 +65,8 @@ public static class DemoSceneSetup
         // === NETWORK MANAGER ===
         GameObject networkManagerObj = new GameObject("NetworkManager");
         NetworkManager networkManager = networkManagerObj.AddComponent<NetworkManager>();
-        networkManagerObj.AddComponent<UnityTransport>();
+        UnityTransport transport = networkManagerObj.AddComponent<UnityTransport>();
+        transport.SetConnectionData("127.0.0.1", 7777, "0.0.0.0");
 
         // === GAME MANAGER ===
         GameObject gameManagerObj = new GameObject("GameManager");

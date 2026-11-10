@@ -66,6 +66,13 @@ public class LobbyUI : MonoBehaviour
         // Host button
         if (GUI.Button(new Rect(x + 60f, y + 55f, 200f, 35f), "HOST GAME"))
         {
+            UnityTransport transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            if (transport != null)
+            {
+                // Listen on 0.0.0.0 so all network adapters (LAN & localhost) can connect
+                transport.SetConnectionData("127.0.0.1", 7777, "0.0.0.0");
+            }
+
             NetworkManager.Singleton.StartHost();
 
             // Auto-start the round
@@ -88,7 +95,7 @@ public class LobbyUI : MonoBehaviour
             UnityTransport transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             if (transport != null)
             {
-                transport.ConnectionData.Address = joinAddress;
+                transport.SetConnectionData(joinAddress.Trim(), 7777);
             }
             NetworkManager.Singleton.StartClient();
         }

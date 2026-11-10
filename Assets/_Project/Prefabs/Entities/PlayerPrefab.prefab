@@ -442,9 +442,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RagdollController
   ShowTopMostFoldoutHeaderGroup: 1
-  recoveryTime: 3
-  ragdollDrag: 2
+  recoveryTime: 2.5
+  ragdollDrag: 1.5
   IsRagdolled:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
+  RemainingRecoveryTime:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0
       MaxSecondsBetweenUpdates: 0
@@ -489,5 +494,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GrabThrow
   ShowTopMostFoldoutHeaderGroup: 1
   grabRange: 5
-  throwForce: 22
+  throwForce: 26
   holdPoint: {fileID: 2264484791828041518}
