@@ -38,7 +38,20 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         if (IsServer)
         {
             CurrentHealth.Value = maxHealth;
-            spawnPosition = transform.position;
+
+            // Spawn player into the staging LobbyArea by default
+            if (LobbyArea.Instance != null &&
+                (GameManager.Instance == null || GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby))
+            {
+                int index = (int)OwnerClientId;
+                spawnPosition = LobbyArea.Instance.GetLobbySpawnPoint(index);
+                transform.position = spawnPosition;
+                ResetPlayerClientRpc(spawnPosition);
+            }
+            else
+            {
+                spawnPosition = transform.position;
+            }
         }
     }
 

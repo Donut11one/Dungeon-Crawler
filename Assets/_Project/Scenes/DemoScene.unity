@@ -548,6 +548,7 @@ GameObject:
   - component: {fileID: 1513857454}
   - component: {fileID: 1513857453}
   - component: {fileID: 1513857452}
+  - component: {fileID: 1513857456}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -569,10 +570,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DungeonBuilder
   ShowTopMostFoldoutHeaderGroup: 1
   wallHeight: 4
-  wallThickness: 0.4
-  barrelCount: 10
+  wallThickness: 0.3
+  doorWidth: 3.2
+  coinCount: 15
   enemyCount: 2
-  barrelPrefab: {fileID: 7444793825520279168, guid: 000a3ae3976ea684884813bbc6c0a4fc, type: 3}
+  coinPrefab: {fileID: 4810294819203810291, guid: 68ec2c99149d4a4e908ac6ea3bcbe7e8, type: 3}
   enemyPrefab: {fileID: 4648712207719633019, guid: ef5ded0161c75e54283cbfc84daa197c, type: 3}
   floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
   wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
@@ -628,6 +630,28 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &1513857456
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1513857451}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d0446fd095243939f2b54647243ffc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LobbyArea
+  ShowTopMostFoldoutHeaderGroup: 1
+  lobbyCenter: {x: 0, y: 0, z: -80}
+  roomWidth: 16
+  roomDepth: 12
+  wallHeight: 4
+  wallThickness: 0.3
+  floorColor: {r: 0.28, g: 0.3, b: 0.33, a: 1}
+  wallColor: {r: 0.38, g: 0.4, b: 0.44, a: 1}
+  ceilingColor: {r: 0.22, g: 0.23, b: 0.25, a: 1}
+  elevatorColor: {r: 0.15, g: 0.85, b: 1, a: 1}
 --- !u!4 &1513857455
 Transform:
   m_ObjectHideFlags: 0

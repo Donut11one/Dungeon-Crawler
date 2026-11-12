@@ -263,6 +263,7 @@ GameObject:
   - component: {fileID: 6405346687328916408}
   - component: {fileID: 7179572380642951286}
   - component: {fileID: 8148294474809715182}
+  - component: {fileID: 9148294474809715183}
   m_Layer: 0
   m_Name: PlayerPrefab
   m_TagString: Untagged
@@ -496,3 +497,26 @@ MonoBehaviour:
   grabRange: 5
   throwForce: 26
   holdPoint: {fileID: 2264484791828041518}
+--- !u!114 &9148294474809715183
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7297492257591209784}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 28ca1017ed6969e46bde33cabe4afd56, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerWallet
+  ShowTopMostFoldoutHeaderGroup: 1
+  RunMoney:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
+  BankedMoney:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
