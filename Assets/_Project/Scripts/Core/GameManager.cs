@@ -75,7 +75,7 @@ public class GameManager : NetworkBehaviour
     /// <summary>
     /// Server: Start the expedition dive.
     /// Resets dungeon entities, resets run money to $0 (banked savings stay),
-    /// and teleports all players from the Lobby into the Dungeon.
+    /// revives all players, resets ready states, and teleports all players from Lobby into Dungeon.
     /// </summary>
     public void StartRound()
     {
@@ -86,16 +86,15 @@ public class GameManager : NetworkBehaviour
 
         extractedPlayers.Clear();
         RoundTimer.Value = roundDuration;
-        CurrentState.Value = GameState.Playing;
 
-        // Reset dungeon entities
+        // Reset dungeon entities (coins, traps, enemies)
         DungeonBuilder dungeonBuilder = FindAnyObjectByType<DungeonBuilder>();
         if (dungeonBuilder != null)
         {
             dungeonBuilder.ResetDungeonEntities();
         }
 
-        // Teleport all connected players into the dungeon and reset run money to $0
+        // Teleport all connected players into the dungeon, reset ready flags, and reset run money to $0
         if (NetworkManager.Singleton != null)
         {
             int clientIndex = 0;
@@ -104,6 +103,13 @@ public class GameManager : NetworkBehaviour
                 if (client.PlayerObject == null)
                 {
                     continue;
+                }
+
+                // Reset readiness flag
+                PlayerController pc = client.PlayerObject.GetComponent<PlayerController>();
+                if (pc != null)
+                {
+                    pc.IsReadyToDive.Value = false;
                 }
 
                 // Reset run money to 0 for this new dive; persistent bank is preserved!
@@ -117,6 +123,7 @@ public class GameManager : NetworkBehaviour
                     ? dungeonBuilder.GetPlayerSpawnPoint(clientIndex)
                     : new Vector3(0f, 1f, 0f);
 
+                // Fully revive and position player
                 PlayerHealth ph = client.PlayerObject.GetComponent<PlayerHealth>();
                 if (ph != null)
                 {
@@ -126,6 +133,11 @@ public class GameManager : NetworkBehaviour
                 clientIndex++;
             }
         }
+
+        Physics.SyncTransforms();
+
+        // Transition to Playing state
+        CurrentState.Value = GameState.Playing;
 
         OnRoundStartedClientRpc();
     }
@@ -179,14 +191,23 @@ public class GameManager : NetworkBehaviour
                 {
                     ph.ResetPlayer(lobbySpawn);
                 }
+
+                PlayerController pc = client.PlayerObject.GetComponent<PlayerController>();
+                if (pc != null)
+                {
+                    pc.IsReadyToDive.Value = false;
+                }
             }
         }
+
+        Physics.SyncTransforms();
 
         // Notify all clients that this player escaped
         OnPlayerExtractedClientRpc(clientId, bankedAmount, totalBank);
 
-        // Check if all alive players have extracted
+        // Check if all connected alive players have extracted
         bool allExtracted = true;
+        int validPlayers = 0;
         foreach (NetworkClient nc in NetworkManager.Singleton.ConnectedClientsList)
         {
             if (nc.PlayerObject == null)
@@ -200,6 +221,7 @@ public class GameManager : NetworkBehaviour
                 continue;
             }
 
+            validPlayers++;
             if (!ph.IsDead.Value && !extractedPlayers.Contains(nc.ClientId))
             {
                 allExtracted = false;
@@ -207,7 +229,7 @@ public class GameManager : NetworkBehaviour
             }
         }
 
-        if (allExtracted)
+        if (validPlayers > 0 && allExtracted)
         {
             RoundTimer.Value = 0f;
             CurrentState.Value = GameState.RoundOver;
@@ -217,7 +239,7 @@ public class GameManager : NetworkBehaviour
 
     /// <summary>
     /// Server: Return all players to the staging lobby.
-    /// Resets timer, clears extracted status, teleports all players back to the LobbyArea.
+    /// Resets timer, clears extracted status, resets ready states, teleports all players back to the LobbyArea.
     /// Resets run money to $0 while keeping all banked savings intact!
     /// </summary>
     public void ReturnToLobby()
@@ -229,7 +251,6 @@ public class GameManager : NetworkBehaviour
 
         extractedPlayers.Clear();
         RoundTimer.Value = 0f;
-        CurrentState.Value = GameState.Lobby;
 
         DungeonBuilder dungeonBuilder = FindAnyObjectByType<DungeonBuilder>();
         if (dungeonBuilder != null)
@@ -263,9 +284,19 @@ public class GameManager : NetworkBehaviour
                     wallet.StartNewRun(); // Clear run earnings; keep all banked savings!
                 }
 
+                PlayerController pc = client.PlayerObject.GetComponent<PlayerController>();
+                if (pc != null)
+                {
+                    pc.IsReadyToDive.Value = false;
+                }
+
                 clientIndex++;
             }
         }
+
+        Physics.SyncTransforms();
+
+        CurrentState.Value = GameState.Lobby;
 
         OnReturnedToLobbyClientRpc();
     }
@@ -289,7 +320,6 @@ public class GameManager : NetworkBehaviour
 
         extractedPlayers.Clear();
         RoundTimer.Value = roundDuration;
-        CurrentState.Value = GameState.Playing;
 
         DungeonBuilder dungeonBuilder = FindAnyObjectByType<DungeonBuilder>();
         if (dungeonBuilder != null)
@@ -323,9 +353,19 @@ public class GameManager : NetworkBehaviour
                     wallet.StartNewRun(); // Run starts from $0; bank stays!
                 }
 
+                PlayerController pc = client.PlayerObject.GetComponent<PlayerController>();
+                if (pc != null)
+                {
+                    pc.IsReadyToDive.Value = false;
+                }
+
                 clientIndex++;
             }
         }
+
+        Physics.SyncTransforms();
+
+        CurrentState.Value = GameState.Playing;
 
         OnRoundRestartedClientRpc();
     }
@@ -345,18 +385,33 @@ public class GameManager : NetworkBehaviour
     private void OnRoundStartedClientRpc()
     {
         Debug.Log("[GameManager] Expedition Started! Dive into the dungeon!");
+        GameHUD hud = FindAnyObjectByType<GameHUD>();
+        if (hud != null)
+        {
+            hud.ClearRoundState();
+        }
     }
 
     [Rpc(SendTo.ClientsAndHost)]
     private void OnReturnedToLobbyClientRpc()
     {
         Debug.Log("[GameManager] Returned to Staging Lobby.");
+        GameHUD hud = FindAnyObjectByType<GameHUD>();
+        if (hud != null)
+        {
+            hud.ClearRoundState();
+        }
     }
 
     [Rpc(SendTo.ClientsAndHost)]
     private void OnRoundRestartedClientRpc()
     {
         Debug.Log("[GameManager] Round Restarted!");
+        GameHUD hud = FindAnyObjectByType<GameHUD>();
+        if (hud != null)
+        {
+            hud.ClearRoundState();
+        }
     }
 
     [Rpc(SendTo.ClientsAndHost)]

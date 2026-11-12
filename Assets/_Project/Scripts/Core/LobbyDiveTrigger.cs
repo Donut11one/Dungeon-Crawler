@@ -3,8 +3,9 @@ using UnityEngine;
 
 /// <summary>
 /// Attached to the elevator pad in the LobbyArea.
-/// When a player enters this trigger while in GameState.Lobby,
-/// it launches the expedition and teleports all players into the dungeon.
+/// Stepping onto the elevator pad toggles the player's readiness to dive into the dungeon.
+/// When all connected contractors step on the pad (or press F to agree),
+/// the dive sequence countdown initiates!
 /// </summary>
 public class LobbyDiveTrigger : MonoBehaviour
 {
@@ -26,36 +27,68 @@ public class LobbyDiveTrigger : MonoBehaviour
         // Only pulse when waiting in lobby
         if (GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby)
         {
-            float pulse = 1f + Mathf.Sin(Time.time * pulseSpeed) * 0.08f;
+            float speed = pulseSpeed;
+            if (LobbyArea.Instance != null && LobbyArea.Instance.DiveCountdown.Value > 0f)
+            {
+                speed = pulseSpeed * 2.5f; // Pulse faster during launch countdown
+            }
+
+            float pulse = 1f + Mathf.Sin(Time.time * speed) * 0.08f;
             transform.localScale = new Vector3(baseScale.x * pulse, baseScale.y, baseScale.z * pulse);
         }
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer)
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
         {
             return;
         }
 
-        if (GameManager.Instance == null)
+        PlayerController pc = other.GetComponentInParent<PlayerController>();
+        if (pc == null)
         {
             return;
         }
 
-        if (GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
+        // Client owner sets ready via RPC
+        if (pc.IsOwner)
+        {
+            if (!pc.IsReadyToDive.Value)
+            {
+                pc.SetReadyServerRpc(true);
+            }
+        }
+        else if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+        {
+            pc.IsReadyToDive.Value = true;
+        }
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
         {
             return;
         }
 
-        // Verify it was a player
-        PlayerHealth player = other.GetComponentInParent<PlayerHealth>();
-        if (player == null)
+        PlayerController pc = other.GetComponentInParent<PlayerController>();
+        if (pc == null)
         {
             return;
         }
 
-        Debug.Log($"[LobbyDiveTrigger] Player {player.OwnerClientId} entered elevator pad. Launching dive!");
-        GameManager.Instance.StartRound();
+        // Stepping off the elevator cancels ready
+        if (pc.IsOwner)
+        {
+            if (pc.IsReadyToDive.Value)
+            {
+                pc.SetReadyServerRpc(false);
+            }
+        }
+        else if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+        {
+            pc.IsReadyToDive.Value = false;
+        }
     }
 }

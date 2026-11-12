@@ -5,8 +5,8 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// All-in-one game HUD using OnGUI (no Canvas setup needed).
-/// Displays: lobby status, timer, health, run earnings vs persistent bank savings,
-/// crosshair, extraction status, and all-player scoreboards.
+/// Displays: lobby staging status & mutual ready system, countdown timer, health,
+/// run earnings vs persistent bank savings, crosshair, extraction status, and all-player scoreboards.
 /// </summary>
 public class GameHUD : MonoBehaviour
 {
@@ -110,6 +110,17 @@ public class GameHUD : MonoBehaviour
     }
 
     /// <summary>
+    /// Called across network via GameManager ClientRpc when round starts, restarts, or returns to lobby.
+    /// Wipes all stale round-over states, extraction statuses, and locks cursor for gameplay.
+    /// </summary>
+    public void ClearRoundState()
+    {
+        extractedThisRound.Clear();
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
+
+    /// <summary>
     /// Called by GameManager RPC when a player successfully extracts.
     /// </summary>
     public void RegisterExtraction(ulong clientId, int bankedAmount, int totalBank)
@@ -161,38 +172,84 @@ public class GameHUD : MonoBehaviour
 
         GUIStyle lobbyTitleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 28,
+            fontSize = 26,
             alignment = TextAnchor.UpperCenter,
             fontStyle = FontStyle.Bold
         };
         lobbyTitleStyle.normal.textColor = new Color(0.15f, 0.85f, 1f);
 
-        Rect titleRect = new Rect(0f, 25f, Screen.width, 35f);
-        GUI.Label(titleRect, "STAGING LOBBY // CONTRACTOR BASECAMP", lobbyTitleStyle);
+        Rect titleRect = new Rect(0f, 20f, Screen.width, 32f);
+        GUI.Label(titleRect, "STAGING BUNKER // CONTRACTOR BASECAMP", lobbyTitleStyle);
 
-        GUIStyle subStyle = new GUIStyle(GUI.skin.label)
+        int ready = 0;
+        int total = 1;
+        float countdown = -1f;
+
+        if (LobbyArea.Instance != null)
         {
-            fontSize = 16,
-            alignment = TextAnchor.UpperCenter
-        };
-        subStyle.normal.textColor = new Color(0.9f, 0.9f, 0.9f, 0.85f);
-
-        bool isHost = NetworkManager.Singleton != null && (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsServer);
-
-        string hint = isHost
-            ? "Step into the ELEVATOR PLATFORM or press [F] to dive into the dungeon"
-            : "Waiting for expedition launch. Step onto elevator or wait for host";
-
-        Rect hintRect = new Rect(0f, 60f, Screen.width, 25f);
-        GUI.Label(hintRect, hint, subStyle);
-
-        if (isHost)
+            ready = LobbyArea.Instance.ReadyCount.Value;
+            total = LobbyArea.Instance.TotalPlayers.Value;
+            countdown = LobbyArea.Instance.DiveCountdown.Value;
+        }
+        else if (NetworkManager.Singleton != null)
         {
-            if (GUI.Button(new Rect(Screen.width / 2f - 110f, 90f, 220f, 35f), "ENTER DUNGEON (F)"))
+            total = NetworkManager.Singleton.ConnectedClientsList.Count;
+        }
+
+        PlayerController localPc = FindLocalPlayerController();
+        bool isLocalReady = localPc != null && localPc.IsReadyToDive.Value;
+
+        if (countdown > 0f)
+        {
+            GUIStyle countdownStyle = new GUIStyle(GUI.skin.label)
             {
-                extractedThisRound.Clear();
-                GameManager.Instance.StartRoundServerRpc();
+                fontSize = 26,
+                alignment = TextAnchor.UpperCenter,
+                fontStyle = FontStyle.Bold
+            };
+            countdownStyle.normal.textColor = new Color(0.2f, 1f, 0.3f);
+
+            int sec = Mathf.CeilToInt(countdown);
+            Rect countRect = new Rect(0f, 55f, Screen.width, 35f);
+            GUI.Label(countRect, $"ALL SQUAD MEMBERS READY! DIVING IN {sec}s...", countdownStyle);
+        }
+        else
+        {
+            GUIStyle subStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 18,
+                alignment = TextAnchor.UpperCenter,
+                fontStyle = FontStyle.Bold
+            };
+            subStyle.normal.textColor = (ready >= total && total > 0) ? Color.green : new Color(1f, 0.85f, 0.2f);
+
+            Rect statusRect = new Rect(0f, 55f, Screen.width, 28f);
+            GUI.Label(statusRect, $"EXPEDITION READY: {ready} / {total} CONTRACTORS AGREED", subStyle);
+
+            GUIStyle hintStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 14,
+                alignment = TextAnchor.UpperCenter
+            };
+            hintStyle.normal.textColor = new Color(0.85f, 0.85f, 0.85f, 0.8f);
+
+            Rect hintRect = new Rect(0f, 85f, Screen.width, 22f);
+            GUI.Label(hintRect, "Both contractors must step on the ELEVATOR PLATFORM or press [F] to agree", hintStyle);
+        }
+
+        // Ready toggle button
+        if (localPc != null)
+        {
+            string btnText = isLocalReady ? "YOU ARE READY ✓  (Press F to Cancel)" : "AGREE TO DIVE  (Press F or Step on Pad)";
+            Color originalBg = GUI.backgroundColor;
+            GUI.backgroundColor = isLocalReady ? new Color(0.2f, 0.8f, 0.3f) : new Color(0.9f, 0.7f, 0.1f);
+
+            if (GUI.Button(new Rect(Screen.width / 2f - 180f, 115f, 360f, 38f), btnText))
+            {
+                localPc.SetReadyServerRpc(!isLocalReady);
             }
+
+            GUI.backgroundColor = originalBg;
         }
     }
 
@@ -245,7 +302,7 @@ public class GameHUD : MonoBehaviour
 
         if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby)
         {
-            GUI.Label(rect, "[WASD] Move   |   Step into ELEVATOR pad or press [F] to enter dungeon", hintStyle);
+            GUI.Label(rect, "[WASD] Move   |   [F] Agree to Dive / Cancel   |   Step on ELEVATOR PLATFORM to Ready Up", hintStyle);
         }
         else
         {
@@ -343,37 +400,29 @@ public class GameHUD : MonoBehaviour
             return;
         }
 
-        // In Lobby: Host can press F to start the dive
+        // In Lobby: Any player can press F to toggle their ready agreement
         if (GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby)
         {
             if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
             {
-                if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsServer))
+                PlayerController pc = FindLocalPlayerController();
+                if (pc != null)
                 {
-                    extractedThisRound.Clear();
-                    GameManager.Instance.StartRoundServerRpc();
+                    pc.SetReadyServerRpc(!pc.IsReadyToDive.Value);
                 }
             }
         }
 
-        // Quick restart shortcut: press R when round is over, or L to return to lobby
+        // When round is over: Press L or Space to return squad to lobby
         if (GameManager.Instance.CurrentState.Value == GameManager.GameState.RoundOver)
         {
             if (Keyboard.current != null)
             {
-                if (Keyboard.current.rKey.wasPressedThisFrame)
+                if (Keyboard.current.lKey.wasPressedThisFrame ||
+                    Keyboard.current.rKey.wasPressedThisFrame ||
+                    Keyboard.current.spaceKey.wasPressedThisFrame)
                 {
-                    extractedThisRound.Clear();
-                    GameManager.Instance.RestartRoundServerRpc();
-                    Cursor.lockState = CursorLockMode.Locked;
-                    Cursor.visible = false;
-                }
-                else if (Keyboard.current.lKey.wasPressedThisFrame)
-                {
-                    extractedThisRound.Clear();
                     GameManager.Instance.ReturnToLobbyServerRpc();
-                    Cursor.lockState = CursorLockMode.Locked;
-                    Cursor.visible = false;
                 }
             }
         }
@@ -438,21 +487,10 @@ public class GameHUD : MonoBehaviour
                 }
             }
 
-            // Buttons
-            if (GUI.Button(new Rect(Screen.width / 2f - 225f, Screen.height / 2f + 95f, 210f, 45f), "RETURN TO LOBBY (L)"))
+            // Return to Bunker button (returns all contractors to lobby to ready up together)
+            if (GUI.Button(new Rect(Screen.width / 2f - 160f, Screen.height / 2f + 95f, 320f, 45f), "RETURN TO BUNKER (SPACE / L)"))
             {
-                extractedThisRound.Clear();
                 GameManager.Instance.ReturnToLobbyServerRpc();
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-            }
-
-            if (GUI.Button(new Rect(Screen.width / 2f + 15f, Screen.height / 2f + 95f, 210f, 45f), "PLAY AGAIN (R)"))
-            {
-                extractedThisRound.Clear();
-                GameManager.Instance.RestartRoundServerRpc();
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
             }
         }
     }
@@ -559,6 +597,22 @@ public class GameHUD : MonoBehaviour
         }
 
         return extractedThisRound.ContainsKey(NetworkManager.Singleton.LocalClientId);
+    }
+
+    private PlayerController FindLocalPlayerController()
+    {
+        if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null)
+        {
+            return null;
+        }
+
+        NetworkObject playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
+        if (playerObj == null)
+        {
+            return null;
+        }
+
+        return playerObj.GetComponent<PlayerController>();
     }
 
     private PlayerHealth FindLocalPlayerHealth()

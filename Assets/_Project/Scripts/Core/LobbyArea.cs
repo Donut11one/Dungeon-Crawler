@@ -5,7 +5,7 @@ using UnityEngine;
 /// <summary>
 /// Independent staging lobby area.
 /// Builds a dedicated 3D staging bunker/elevator room completely separate from the dungeon.
-/// Handles initial player spawning in the lobby, the dive elevator trigger into the dungeon,
+/// Manages player spawning in the lobby, mutual ready agreement before diving,
 /// and returning players to the lobby upon extraction or round reset.
 /// </summary>
 public class LobbyArea : NetworkBehaviour
@@ -24,6 +24,25 @@ public class LobbyArea : NetworkBehaviour
     [SerializeField] private Color wallColor = new Color(0.38f, 0.40f, 0.44f);
     [SerializeField] private Color ceilingColor = new Color(0.22f, 0.23f, 0.25f);
     [SerializeField] private Color elevatorColor = new Color(0.15f, 0.85f, 1.0f);
+
+    [Header("Ready System")]
+    public NetworkVariable<int> ReadyCount = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<int> TotalPlayers = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<float> DiveCountdown = new NetworkVariable<float>(
+        -1f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
 
     private GameObject lobbyRoot;
     private readonly List<Vector3> lobbySpawnPoints = new();
@@ -62,6 +81,88 @@ public class LobbyArea : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         BuildLobbyGeometry();
+    }
+
+    private void Update()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        if (GameManager.Instance == null || NetworkManager.Singleton == null)
+        {
+            return;
+        }
+
+        // Only manage ready countdown when actively in the Lobby
+        if (GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
+        {
+            if (DiveCountdown.Value >= 0f)
+            {
+                DiveCountdown.Value = -1f;
+            }
+            return;
+        }
+
+        int total = NetworkManager.Singleton.ConnectedClientsList.Count;
+        int ready = 0;
+
+        foreach (NetworkClient client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (client.PlayerObject == null)
+            {
+                continue;
+            }
+
+            PlayerController pc = client.PlayerObject.GetComponent<PlayerController>();
+            if (pc != null && pc.IsReadyToDive.Value)
+            {
+                ready++;
+            }
+        }
+
+        TotalPlayers.Value = total;
+        ReadyCount.Value = ready;
+
+        // Both/all players must agree before diving!
+        if (ready >= total && total > 0)
+        {
+            if (DiveCountdown.Value < 0f)
+            {
+                DiveCountdown.Value = 3.5f;
+            }
+
+            DiveCountdown.Value -= Time.deltaTime;
+
+            if (DiveCountdown.Value <= 0f)
+            {
+                DiveCountdown.Value = -1f;
+
+                // Reset all ready states before launching
+                foreach (NetworkClient client in NetworkManager.Singleton.ConnectedClientsList)
+                {
+                    if (client.PlayerObject != null)
+                    {
+                        PlayerController pc = client.PlayerObject.GetComponent<PlayerController>();
+                        if (pc != null)
+                        {
+                            pc.IsReadyToDive.Value = false;
+                        }
+                    }
+                }
+
+                LaunchExpedition();
+            }
+        }
+        else
+        {
+            // If someone is not ready or cancels/steps off, abort the countdown
+            if (DiveCountdown.Value >= 0f)
+            {
+                DiveCountdown.Value = -1f;
+            }
+        }
     }
 
     /// <summary>
@@ -189,7 +290,7 @@ public class LobbyArea : NetworkBehaviour
         Vector3 signPos = elevatorPos + new Vector3(0f, wallHeight - 0.6f, 0f);
         GameObject signObj = CreatePrimitive(root, "ElevatorSign",
             signPos,
-            new Vector3(4.5f, 0.6f, 0.1f),
+            new Vector3(5f, 0.6f, 0.1f),
             new Color(1f, 0.7f, 0.1f));
         signObj.GetComponent<Collider>().enabled = false;
     }
@@ -236,13 +337,7 @@ public class LobbyArea : NetworkBehaviour
             return;
         }
 
-        Debug.Log("[LobbyArea] Launching expedition! Teleporting players into dungeon.");
+        Debug.Log("[LobbyArea] All contractors ready! Launching expedition dive into dungeon.");
         GameManager.Instance.StartRound();
-    }
-
-    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
-    public void LaunchExpeditionServerRpc()
-    {
-        LaunchExpedition();
     }
 }

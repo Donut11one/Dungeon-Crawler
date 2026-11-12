@@ -30,6 +30,19 @@ public class PlayerController : NetworkBehaviour
         NetworkVariableWritePermission.Owner
     );
 
+    public NetworkVariable<bool> IsReadyToDive = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void SetReadyServerRpc(bool ready)
+    {
+        IsReadyToDive.Value = ready;
+        Debug.Log($"[PlayerController] Player {OwnerClientId} Ready state set to {ready}");
+    }
+
     private Rigidbody rb;
     private RagdollController ragdollController;
     private Camera playerCamera;
