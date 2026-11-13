@@ -25,7 +25,10 @@ public class GameHUD : MonoBehaviour
     private GUIStyle crosshairStyle;
     private GUIStyle scoreBoardStyle;
     private GUIStyle extractedBannerStyle;
+    private GUIStyle healthBarTextStyle;
+    private GUIStyle enemyBarTextStyle;
     private bool stylesInitialized;
+    private Texture2D solidTexture;
 
     // Tracks which players escaped and their banked money (populated via RPC from GameManager)
     private readonly Dictionary<ulong, ExtractedRecord> extractedThisRound = new();
@@ -106,6 +109,22 @@ public class GameHUD : MonoBehaviour
         };
         extractedBannerStyle.normal.textColor = new Color(0.2f, 1f, 0.2f);
 
+        healthBarTextStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 12,
+            alignment = TextAnchor.MiddleCenter,
+            fontStyle = FontStyle.Bold
+        };
+        healthBarTextStyle.normal.textColor = Color.white;
+
+        enemyBarTextStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 10,
+            alignment = TextAnchor.MiddleCenter,
+            fontStyle = FontStyle.Bold
+        };
+        enemyBarTextStyle.normal.textColor = Color.white;
+
         stylesInitialized = true;
     }
 
@@ -146,6 +165,7 @@ public class GameHUD : MonoBehaviour
         }
 
         DrawCrosshair();
+        DrawEnemyHealthBars();
         DrawLobbyHUD();
         DrawTimer();
         DrawHealth();
@@ -312,16 +332,216 @@ public class GameHUD : MonoBehaviour
             return;
         }
 
-        int hp = localHealth.CurrentHealth.Value;
-        healthStyle.normal.textColor = hp > 50 ? Color.green : (hp > 25 ? Color.yellow : Color.red);
+        int hp = Mathf.Max(0, localHealth.CurrentHealth.Value);
+        int maxHp = localHealth.MaxHealth > 0 ? localHealth.MaxHealth : 100;
+        float pct = Mathf.Clamp01((float)hp / maxHp);
 
-        Rect rect = new Rect(20f, Screen.height - 60f, 300f, 40f);
-        GUI.Label(rect, $"HP: {hp}", healthStyle);
+        float barX = 20f;
+        float barY = Screen.height - 65f;
+        float barW = 230f;
+        float barH = 22f;
 
+        // Outer dark border
+        DrawSolidRect(new Rect(barX - 2f, barY - 2f, barW + 4f, barH + 4f), new Color(0.08f, 0.08f, 0.08f, 0.9f));
+
+        // Background track
+        DrawSolidRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.2f, 0.2f, 0.75f));
+
+        // Health fill lerp (Green when high, Yellow when mid, Red when low)
+        Color fillColor;
+        if (pct > 0.5f)
+        {
+            fillColor = Color.Lerp(new Color(1f, 0.85f, 0.1f), new Color(0.2f, 0.85f, 0.25f), (pct - 0.5f) * 2f);
+        }
+        else
+        {
+            fillColor = Color.Lerp(new Color(0.9f, 0.15f, 0.15f), new Color(1f, 0.85f, 0.1f), pct * 2f);
+        }
+
+        if (pct > 0f)
+        {
+            DrawSolidRect(new Rect(barX, barY, barW * pct, barH), fillColor);
+        }
+
+        // Text overlay
         if (localHealth.IsDead.Value)
         {
-            healthStyle.normal.textColor = Color.red;
-            GUI.Label(new Rect(20f, Screen.height - 90f, 300f, 30f), "DEAD - Respawning...", healthStyle);
+            healthBarTextStyle.normal.textColor = new Color(1f, 0.4f, 0.4f);
+            GUI.Label(new Rect(barX, barY - 1f, barW, barH), "DEAD - RESPAWNING...", healthBarTextStyle);
+        }
+        else
+        {
+            healthBarTextStyle.normal.textColor = Color.white;
+            GUI.Label(new Rect(barX, barY - 1f, barW, barH), $"HP  {hp} / {maxHp}", healthBarTextStyle);
+        }
+    }
+
+    private void DrawEnemyHealthBars()
+    {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState.Value != GameManager.GameState.Playing)
+        {
+            return;
+        }
+
+        Camera cam = GetActivePlayerCamera();
+        if (cam == null)
+        {
+            return;
+        }
+
+        float maxDistance = 14f;
+        float fadeStartDist = 10f;
+
+        for (int i = EnemyHealth.ActiveEnemies.Count - 1; i >= 0; i--)
+        {
+            EnemyHealth enemy = EnemyHealth.ActiveEnemies[i];
+            if (enemy == null)
+            {
+                EnemyHealth.ActiveEnemies.RemoveAt(i);
+                continue;
+            }
+
+            if (enemy.IsDead.Value)
+            {
+                continue;
+            }
+
+            // Determine world position above enemy head
+            Vector3 headWorldPos = enemy.transform.position + Vector3.up * 2.35f;
+            Collider enemyCol = enemy.GetComponent<Collider>();
+            if (enemyCol != null)
+            {
+                headWorldPos = enemyCol.bounds.center + Vector3.up * (enemyCol.bounds.extents.y + 0.35f);
+            }
+
+            Vector3 camPos = cam.transform.position;
+            Vector3 toEnemy = headWorldPos - camPos;
+            float dist = toEnemy.magnitude;
+
+            if (dist > maxDistance || dist < 0.1f)
+            {
+                continue;
+            }
+
+            // Camera frustum check (in front of camera)
+            Vector3 screenPos = cam.WorldToScreenPoint(headWorldPos);
+            if (screenPos.z <= 0.2f)
+            {
+                continue;
+            }
+
+            // Line-of-sight raycast to ensure bars aren't visible through dungeon walls
+            float rayTestDist = dist - 0.4f;
+            if (rayTestDist > 0.2f)
+            {
+                Vector3 rayOrigin = camPos + toEnemy.normalized * 0.3f;
+                if (Physics.Raycast(rayOrigin, toEnemy.normalized, out RaycastHit hit, rayTestDist, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    if (hit.transform != enemy.transform && !hit.transform.IsChildOf(enemy.transform))
+                    {
+                        continue;
+                    }
+                }
+            }
+
+            // Fade alpha based on distance (solid up to fadeStartDist, fading out to maxDistance)
+            float alpha = 1f;
+            if (dist > fadeStartDist)
+            {
+                alpha = Mathf.Clamp01((maxDistance - dist) / (maxDistance - fadeStartDist));
+            }
+
+            if (alpha <= 0.02f)
+            {
+                continue;
+            }
+
+            // Convert screen position to GUI coordinates
+            float guiX = screenPos.x;
+            float guiY = Screen.height - screenPos.y;
+
+            if (guiX < -80f || guiX > Screen.width + 80f || guiY < -50f || guiY > Screen.height + 50f)
+            {
+                continue;
+            }
+
+            int enemyHp = Mathf.Max(0, enemy.CurrentHealth.Value);
+            int enemyMaxHp = enemy.MaxHealth > 0 ? enemy.MaxHealth : 50;
+            float pct = Mathf.Clamp01((float)enemyHp / enemyMaxHp);
+
+            float barW = 68f;
+            float barH = 7f;
+            float barX = guiX - barW * 0.5f;
+            float barY = guiY - barH * 0.5f;
+
+            // Border & background track
+            DrawSolidRect(new Rect(barX - 1f, barY - 1f, barW + 2f, barH + 2f), new Color(0.05f, 0.05f, 0.05f, 0.85f * alpha));
+            DrawSolidRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.2f, 0.2f, 0.7f * alpha));
+
+            // Fill color (red to yellow to green)
+            Color fillColor;
+            if (pct > 0.5f)
+            {
+                fillColor = Color.Lerp(Color.yellow, new Color(0.25f, 0.85f, 0.25f), (pct - 0.5f) * 2f);
+            }
+            else
+            {
+                fillColor = Color.Lerp(new Color(0.9f, 0.15f, 0.15f), Color.yellow, pct * 2f);
+            }
+            fillColor.a *= alpha;
+
+            if (pct > 0f)
+            {
+                DrawSolidRect(new Rect(barX, barY, barW * pct, barH), fillColor);
+            }
+
+            // Text label above the floating bar
+            enemyBarTextStyle.normal.textColor = new Color(1f, 1f, 1f, 0.9f * alpha);
+            GUI.Label(new Rect(barX - 20f, barY - 13f, barW + 40f, 13f), $"{enemyHp} / {enemyMaxHp}", enemyBarTextStyle);
+        }
+    }
+
+    private Camera GetActivePlayerCamera()
+    {
+        PlayerController pc = FindLocalPlayerController();
+        if (pc != null)
+        {
+            Camera playerCam = pc.GetComponentInChildren<Camera>();
+            if (playerCam != null && playerCam.isActiveAndEnabled)
+            {
+                return playerCam;
+            }
+        }
+
+        Camera main = Camera.main;
+        if (main != null && main.isActiveAndEnabled)
+        {
+            return main;
+        }
+
+        return Camera.allCamerasCount > 0 ? Camera.allCameras[0] : null;
+    }
+
+    private void DrawSolidRect(Rect rect, Color color)
+    {
+        if (solidTexture == null)
+        {
+            solidTexture = new Texture2D(1, 1);
+            solidTexture.SetPixel(0, 0, Color.white);
+            solidTexture.Apply();
+        }
+
+        Color prevColor = GUI.color;
+        GUI.color = color;
+        GUI.DrawTexture(rect, solidTexture);
+        GUI.color = prevColor;
+    }
+
+    private void OnDestroy()
+    {
+        if (solidTexture != null)
+        {
+            Destroy(solidTexture);
         }
     }
 

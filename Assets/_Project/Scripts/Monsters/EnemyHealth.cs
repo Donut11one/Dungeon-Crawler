@@ -9,6 +9,8 @@ using UnityEngine;
 /// </summary>
 public class EnemyHealth : NetworkBehaviour, IDamageable
 {
+    public static readonly List<EnemyHealth> ActiveEnemies = new();
+
     [Header("Health")]
     [SerializeField] private int maxHealth = 50;
     [SerializeField] private float knockbackMultiplier = 3f;
@@ -16,6 +18,14 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
 
     [Header("Damage Settings")]
     [SerializeField] private float damageCooldown = 0.5f;
+
+    public int MaxHealth
+    {
+        get
+        {
+            return maxHealth;
+        }
+    }
 
     [Header("Loot Drops")]
     [SerializeField] private GameObject[] dropPrefabs;
@@ -39,6 +49,19 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
     private BasicEnemyAI enemyAI;
     private float despawnTimer;
     private float damageCooldownTimer;
+
+    private void OnEnable()
+    {
+        if (!ActiveEnemies.Contains(this))
+        {
+            ActiveEnemies.Add(this);
+        }
+    }
+
+    private void OnDisable()
+    {
+        ActiveEnemies.Remove(this);
+    }
 
     private void Awake()
     {

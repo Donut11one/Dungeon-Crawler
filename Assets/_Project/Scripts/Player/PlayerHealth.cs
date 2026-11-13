@@ -15,6 +15,14 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     [Header("Damage Settings")]
     [SerializeField] private float damageCooldown = 1.2f;
 
+    public int MaxHealth
+    {
+        get
+        {
+            return maxHealth;
+        }
+    }
+
     public NetworkVariable<int> CurrentHealth = new NetworkVariable<int>(
         100,
         NetworkVariableReadPermission.Everyone,
