@@ -20,8 +20,12 @@ public class PlayerInventory : NetworkBehaviour
         NetworkVariableWritePermission.Owner
     );
 
+    private PlayerAttack playerAttack;
+
     private void Awake()
     {
+        playerAttack = GetComponent<PlayerAttack>();
+
         Slots = new NetworkList<InventorySlot>(
             null,
             NetworkVariableReadPermission.Everyone,
@@ -42,9 +46,6 @@ public class PlayerInventory : NetworkBehaviour
                 {
                     Slots.Add(new InventorySlot());
                 }
-
-                // Grant contractor starter test weapon in slot 0 (Iron Pipe)
-                Slots[0] = new InventorySlot("scrap_pipe", 1);
             }
         }
     }
@@ -62,6 +63,12 @@ public class PlayerInventory : NetworkBehaviour
     private void HandleHotbarSelectionInput()
     {
         if (Keyboard.current == null)
+        {
+            return;
+        }
+
+        // Cannot switch weapons or drop item while committed to an active attack swing
+        if (playerAttack != null && !playerAttack.CanSwapItem())
         {
             return;
         }
@@ -98,7 +105,29 @@ public class PlayerInventory : NetworkBehaviour
     {
         if (index >= 0 && index < HotbarSlotCount)
         {
+            if (index == SelectedSlotIndex.Value)
+            {
+                return;
+            }
+
+            if (playerAttack == null)
+            {
+                playerAttack = GetComponent<PlayerAttack>();
+            }
+
+            // Cannot swap while mid-swing!
+            if (playerAttack != null && !playerAttack.CanSwapItem())
+            {
+                return;
+            }
+
             SelectedSlotIndex.Value = index;
+
+            // Enforce weapon swap equip delay and preserve cooldown to prevent hot-swap exploit
+            if (playerAttack != null)
+            {
+                playerAttack.OnItemSwapped();
+            }
         }
     }
 
@@ -130,6 +159,45 @@ public class PlayerInventory : NetworkBehaviour
             return Slots[index];
         }
         return default;
+    }
+
+    /// <summary>
+    /// Server-authoritative: Clears all inventory slots (used on death or timeout in dungeon).
+    /// </summary>
+    public void ClearInventory()
+    {
+        if (!IsServer || Slots == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            Slots[i] = default;
+        }
+
+        Debug.Log($"[PlayerInventory] Cleared inventory for client {OwnerClientId}");
+    }
+
+    /// <summary>
+    /// Checks if there is at least one empty hotbar slot.
+    /// </summary>
+    public bool HasFreeSlot()
+    {
+        if (Slots == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            if (Slots[i].IsEmpty)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -211,5 +279,47 @@ public class PlayerInventory : NetworkBehaviour
         WorldItemPickup.SpawnPickup(slot.itemId.ToString(), slot.count, spawnPos, transform.forward * 3.5f + Vector3.up * 1.5f);
 
         Slots[index] = default;
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void BuyItemServerRpc(string itemId)
+    {
+        if (!IsServer || string.IsNullOrEmpty(itemId))
+        {
+            return;
+        }
+
+        ItemData item = ItemRegistry.GetItem(itemId);
+        if (item == null)
+        {
+            return;
+        }
+
+        PlayerWallet wallet = GetComponent<PlayerWallet>();
+        if (wallet == null)
+        {
+            return;
+        }
+
+        if (!HasFreeSlot())
+        {
+            BuyFeedbackClientRpc("Inventory full! Drop an item [Q] first.", false);
+            return;
+        }
+
+        if (!wallet.TrySpendBankedMoney(item.BuyPrice))
+        {
+            BuyFeedbackClientRpc($"Not enough money! Need ${item.BuyPrice} in bank.", false);
+            return;
+        }
+
+        AddItem(itemId, 1);
+        BuyFeedbackClientRpc($"Purchased {item.DisplayName} for ${item.BuyPrice}!", true);
+    }
+
+    [Rpc(SendTo.Owner)]
+    private void BuyFeedbackClientRpc(string message, bool success)
+    {
+        ArmoryShopUI.ShowFeedback(message, success);
     }
 }

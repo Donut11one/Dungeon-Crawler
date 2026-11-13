@@ -78,6 +78,11 @@ public class LobbyArea : NetworkBehaviour
         return lobbySpawnPoints[index % lobbySpawnPoints.Count];
     }
 
+    private void Start()
+    {
+        BuildLobbyGeometry();
+    }
+
     public override void OnNetworkSpawn()
     {
         BuildLobbyGeometry();
@@ -225,6 +230,9 @@ public class LobbyArea : NetworkBehaviour
 
         // 5. Dive Elevator Platform (Trigger zone to enter dungeon)
         BuildDiveElevator(root);
+
+        // 6. Facility Armory Shop (Quartermaster NPC opposite the dive pad)
+        BuildShopAlcove(root);
     }
 
     private void BuildProps(Transform root)
@@ -293,6 +301,133 @@ public class LobbyArea : NetworkBehaviour
             new Vector3(5f, 0.6f, 0.1f),
             new Color(1f, 0.7f, 0.1f));
         signObj.GetComponent<Collider>().enabled = false;
+    }
+
+    private void BuildShopAlcove(Transform root)
+    {
+        float southZ = lobbyCenter.z - roomDepth * 0.5f; // -86f
+
+        // 1. Shop Counter
+        Vector3 counterPos = new Vector3(lobbyCenter.x, 0.5f, southZ + 1.4f);
+        CreatePrimitive(root, "ShopCounter_Base",
+            counterPos,
+            new Vector3(3.8f, 1.0f, 0.8f),
+            new Color(0.25f, 0.28f, 0.32f));
+
+        // Counter top rim
+        CreatePrimitive(root, "ShopCounter_Top",
+            counterPos + new Vector3(0f, 0.52f, 0f),
+            new Vector3(4.0f, 0.08f, 0.95f),
+            new Color(0.18f, 0.20f, 0.22f));
+
+        // Cash register / terminal on counter
+        CreatePrimitive(root, "ShopTerminal",
+            counterPos + new Vector3(1.1f, 0.65f, 0f),
+            new Vector3(0.5f, 0.25f, 0.4f),
+            new Color(0.15f, 0.75f, 0.95f));
+
+        // 2. Framing Pillars & Canopy
+        CreatePrimitive(root, "ShopPillar_L",
+            new Vector3(lobbyCenter.x - 2.0f, 1.8f, southZ + 1.4f),
+            new Vector3(0.35f, 3.6f, 0.8f),
+            new Color(0.22f, 0.25f, 0.28f));
+
+        CreatePrimitive(root, "ShopPillar_R",
+            new Vector3(lobbyCenter.x + 2.0f, 1.8f, southZ + 1.4f),
+            new Vector3(0.35f, 3.6f, 0.8f),
+            new Color(0.22f, 0.25f, 0.28f));
+
+        CreatePrimitive(root, "ShopCanopy",
+            new Vector3(lobbyCenter.x, 3.6f, southZ + 1.0f),
+            new Vector3(4.4f, 0.25f, 1.6f),
+            new Color(0.20f, 0.22f, 0.25f));
+
+        // 3. Back Shelves against South wall
+        CreatePrimitive(root, "ShopShelves_Back",
+            new Vector3(lobbyCenter.x, 1.8f, southZ + 0.35f),
+            new Vector3(3.6f, 3.2f, 0.4f),
+            new Color(0.18f, 0.19f, 0.22f));
+
+        // Weapon crate props on shelf
+        CreatePrimitive(root, "ShopCrate_1",
+            new Vector3(lobbyCenter.x - 1.0f, 1.4f, southZ + 0.55f),
+            new Vector3(0.8f, 0.5f, 0.6f),
+            new Color(0.45f, 0.35f, 0.2f));
+
+        CreatePrimitive(root, "ShopCrate_2",
+            new Vector3(lobbyCenter.x + 1.0f, 1.4f, southZ + 0.55f),
+            new Vector3(0.9f, 0.4f, 0.5f),
+            new Color(0.3f, 0.45f, 0.3f));
+
+        // 4. Overhead Illuminated Sign
+        Vector3 signPos = new Vector3(lobbyCenter.x, 3.3f, southZ + 1.85f);
+        GameObject signObj = CreatePrimitive(root, "ArmorySign",
+            signPos,
+            new Vector3(4.0f, 0.6f, 0.1f),
+            new Color(1f, 0.75f, 0.15f));
+        signObj.GetComponent<Collider>().enabled = false;
+
+        // 5. Warm Point Light on shop
+        GameObject lightObj = new GameObject("ShopLight");
+        lightObj.transform.parent = root;
+        lightObj.transform.position = new Vector3(lobbyCenter.x, 2.9f, southZ + 1.4f);
+        Light pointLight = lightObj.AddComponent<Light>();
+        pointLight.type = LightType.Point;
+        pointLight.color = new Color(1.0f, 0.88f, 0.68f);
+        pointLight.range = 8.5f;
+        pointLight.intensity = 2.2f;
+
+        // 6. Quartermaster Vendor NPC Model
+        Vector3 npcPos = new Vector3(lobbyCenter.x, 0f, southZ + 0.75f);
+        GameObject npcObj = new GameObject("QuartermasterKnox");
+        npcObj.transform.parent = root;
+        npcObj.transform.position = npcPos;
+        npcObj.transform.rotation = Quaternion.identity; // Facing +Z (towards the pad)
+
+        // Body primitives
+        CreatePrimitive(npcObj.transform, "NPC_Legs",
+            npcPos + new Vector3(0f, 0.45f, 0f),
+            new Vector3(0.65f, 0.9f, 0.4f),
+            new Color(0.20f, 0.22f, 0.25f));
+
+        CreatePrimitive(npcObj.transform, "NPC_Torso",
+            npcPos + new Vector3(0f, 1.35f, 0f),
+            new Vector3(0.75f, 0.9f, 0.45f),
+            new Color(0.70f, 0.50f, 0.15f)); // Hazard vest
+
+        CreatePrimitive(npcObj.transform, "NPC_Head",
+            npcPos + new Vector3(0f, 2.05f, 0f),
+            new Vector3(0.42f, 0.42f, 0.42f),
+            new Color(0.30f, 0.33f, 0.36f)); // Helmet
+
+        CreatePrimitive(npcObj.transform, "NPC_Visor",
+            npcPos + new Vector3(0f, 2.05f, 0.22f),
+            new Vector3(0.32f, 0.14f, 0.1f),
+            new Color(0.15f, 0.85f, 1.0f)); // Glowing cyan visor
+
+        CreatePrimitive(npcObj.transform, "NPC_ArmL",
+            npcPos + new Vector3(-0.48f, 1.15f, 0.25f),
+            new Vector3(0.22f, 0.5f, 0.5f),
+            new Color(0.30f, 0.33f, 0.36f));
+
+        CreatePrimitive(npcObj.transform, "NPC_ArmR",
+            npcPos + new Vector3(0.48f, 1.15f, 0.25f),
+            new Vector3(0.22f, 0.5f, 0.5f),
+            new Color(0.30f, 0.33f, 0.36f));
+
+        // Add Solid Box Collider to NPC
+        BoxCollider npcCol = npcObj.AddComponent<BoxCollider>();
+        npcCol.center = new Vector3(0f, 1.1f, 0f);
+        npcCol.size = new Vector3(0.9f, 2.2f, 0.6f);
+
+        // Attach ShopNPC interaction script
+        npcObj.AddComponent<ShopNPC>();
+
+        // Ensure ArmoryShopUI exists in scene
+        if (FindAnyObjectByType<ArmoryShopUI>() == null)
+        {
+            npcObj.AddComponent<ArmoryShopUI>();
+        }
     }
 
     private GameObject CreatePrimitive(Transform parent, string label,

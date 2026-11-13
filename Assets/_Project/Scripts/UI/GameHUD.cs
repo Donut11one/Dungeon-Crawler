@@ -58,8 +58,8 @@ public class GameHUD : MonoBehaviour
 
         moneyStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 22,
-            alignment = TextAnchor.LowerLeft,
+            fontSize = 18,
+            alignment = TextAnchor.MiddleLeft,
             fontStyle = FontStyle.Bold
         };
         moneyStyle.normal.textColor = new Color(1f, 0.85f, 0f); // Gold
@@ -160,6 +160,12 @@ public class GameHUD : MonoBehaviour
             return;
         }
         if (!NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
+        {
+            return;
+        }
+
+        // When the Armory Shop is open, suppress HUD to prevent any visual overlap
+        if (ArmoryShopUI.Instance != null && ArmoryShopUI.Instance.IsOpen)
         {
             return;
         }
@@ -292,19 +298,47 @@ public class GameHUD : MonoBehaviour
 
         int selectedSlot = inventory.SelectedSlotIndex.Value;
 
-        // Draw active item name centered above the hotbar (Minecraft style!)
+        // Draw active item name & attack recharge bar centered above the hotbar
         ItemData activeItem = inventory.GetSelectedItem();
         string activeName = activeItem != null ? activeItem.DisplayName.ToUpper() : "FISTS";
         Color activeColor = activeItem != null ? activeItem.SlotColor : new Color(0.9f, 0.9f, 0.9f);
 
-        GUIStyle activeItemStyle = new GUIStyle(GUI.skin.label)
+        PlayerAttack localAttack = FindLocalPlayerAttack();
+        if (localAttack != null && localAttack.IsOnCooldown)
         {
-            fontSize = 13,
-            alignment = TextAnchor.MiddleCenter,
-            fontStyle = FontStyle.Bold
-        };
-        activeItemStyle.normal.textColor = activeColor;
-        GUI.Label(new Rect(startX - 50f, startY - 20f, totalWidth + 100f, 18f), $"[ {activeName} ]", activeItemStyle);
+            float barW = 160f;
+            float barH = 4f;
+            float barX = (Screen.width - barW) * 0.5f;
+            float barY = startY - 26f;
+            float fillPct = localAttack.CooldownProgress;
+
+            DrawSolidRect(new Rect(barX - 1f, barY - 1f, barW + 2f, barH + 2f), new Color(0.05f, 0.05f, 0.05f, 0.85f));
+            DrawSolidRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.2f, 0.2f, 0.65f));
+            Color fillColor = localAttack.IsAttacking ? new Color(1f, 0.25f, 0.1f) : new Color(0.2f, 0.7f, 1f);
+            DrawSolidRect(new Rect(barX, barY, barW * fillPct, barH), fillColor);
+
+            string stateTag = localAttack.IsAttacking ? $"[ SWINGING // {activeName} ]" : $"[ RECOVERING ({localAttack.AttackTimer:0.0}s) ]";
+            Color tagColor = localAttack.IsAttacking ? new Color(1f, 0.35f, 0.15f) : new Color(0.3f, 0.8f, 1f);
+            GUIStyle tagStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 11,
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold
+            };
+            tagStyle.normal.textColor = tagColor;
+            GUI.Label(new Rect(barX - 50f, barY - 15f, barW + 100f, 15f), stateTag, tagStyle);
+        }
+        else
+        {
+            GUIStyle activeItemStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 13,
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold
+            };
+            activeItemStyle.normal.textColor = activeColor;
+            GUI.Label(new Rect(startX - 50f, startY - 22f, totalWidth + 100f, 18f), $"[ {activeName} ]", activeItemStyle);
+        }
 
         GUIStyle slotNumStyle = new GUIStyle(GUI.skin.label)
         {
@@ -387,27 +421,62 @@ public class GameHUD : MonoBehaviour
     {
         GUIStyle hintStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 14,
-            alignment = TextAnchor.LowerCenter
+            fontSize = 12,
+            alignment = TextAnchor.MiddleCenter
         };
-        hintStyle.normal.textColor = new Color(0.9f, 0.9f, 0.9f, 0.7f);
+        hintStyle.normal.textColor = new Color(0.9f, 0.9f, 0.9f, 0.75f);
 
-        Rect rect = new Rect(0f, Screen.height - 35f, Screen.width, 30f);
+        float hintW = Screen.width - 500f;
+        Rect rect = new Rect(250f, Screen.height - 28f, hintW, 25f);
 
         if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby)
         {
-            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack / Fist   |   [E] Pick Up/Drop   |   [F] Agree to Dive", hintStyle);
+            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack   |   [E] Trade / Interact   |   [F] Agree to Dive", hintStyle);
         }
         else
         {
-            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack / Fist   |   [E] Pick Up/Drop   |   [Right Click] Throw", hintStyle);
+            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack   |   [E] Grab/Drop   |   [Right Click] Throw", hintStyle);
         }
     }
 
     private void DrawCrosshair()
     {
+        PlayerAttack attack = FindLocalPlayerAttack();
+        Color crossColor = Color.white;
+        string crossChar = "+";
+
+        if (attack != null)
+        {
+            if (attack.CurrentCombatState.Value == PlayerCombatState.Attacking)
+            {
+                crossColor = new Color(1f, 0.25f, 0.1f);
+                crossChar = "x";
+            }
+            else if (attack.CurrentCombatState.Value == PlayerCombatState.Cooldown)
+            {
+                crossColor = new Color(0.2f, 0.65f, 0.95f, 0.85f);
+                crossChar = "·";
+            }
+        }
+
+        crosshairStyle.normal.textColor = crossColor;
         Rect rect = new Rect(Screen.width / 2f - 15f, Screen.height / 2f - 15f, 30f, 30f);
-        GUI.Label(rect, "+", crosshairStyle);
+        GUI.Label(rect, crossChar, crosshairStyle);
+
+        // Under crosshair: Draw slim attack recharge indicator during cooldown
+        if (attack != null && attack.IsOnCooldown)
+        {
+            float fillPct = attack.CooldownProgress;
+            float barW = 28f;
+            float barH = 3f;
+            float barX = Screen.width / 2f - barW * 0.5f;
+            float barY = Screen.height / 2f + 16f;
+
+            DrawSolidRect(new Rect(barX - 1f, barY - 1f, barW + 2f, barH + 2f), new Color(0.05f, 0.05f, 0.05f, 0.8f));
+            DrawSolidRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.2f, 0.2f, 0.6f));
+            Color fillColor = attack.IsAttacking ? new Color(1f, 0.25f, 0.1f) : new Color(0.2f, 0.7f, 1f);
+            DrawSolidRect(new Rect(barX, barY, barW * fillPct, barH), fillColor);
+        }
     }
 
     private void DrawTimer()
@@ -447,9 +516,9 @@ public class GameHUD : MonoBehaviour
         float pct = Mathf.Clamp01((float)hp / maxHp);
 
         float barX = 20f;
-        float barY = Screen.height - 65f;
-        float barW = 230f;
-        float barH = 22f;
+        float barY = Screen.height - 54f;
+        float barW = 220f;
+        float barH = 20f;
 
         // Outer dark border
         DrawSolidRect(new Rect(barX - 2f, barY - 2f, barW + 4f, barH + 4f), new Color(0.08f, 0.08f, 0.08f, 0.9f));
@@ -698,9 +767,10 @@ public class GameHUD : MonoBehaviour
 
         // In lobby: show total accumulated money; in run: show money collected this run (starts at 0)
         int displayAmount = inLobby ? localWallet.BankedMoney.Value : localWallet.RunMoney.Value;
+        string moneyLabel = inLobby ? $"BANK: ${displayAmount}" : $"RUN: ${displayAmount}";
 
-        Rect rect = new Rect(20f, Screen.height - 95f, 300f, 40f);
-        GUI.Label(rect, $"MONEY: ${displayAmount}", moneyStyle);
+        Rect rect = new Rect(20f, Screen.height - 84f, 220f, 26f);
+        GUI.Label(rect, moneyLabel, moneyStyle);
     }
 
     private void DrawConnectionInfo()
@@ -985,5 +1055,21 @@ public class GameHUD : MonoBehaviour
         }
 
         return playerObj.GetComponent<PlayerInventory>();
+    }
+
+    private PlayerAttack FindLocalPlayerAttack()
+    {
+        if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null)
+        {
+            return null;
+        }
+
+        NetworkObject playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
+        if (playerObj == null)
+        {
+            return null;
+        }
+
+        return playerObj.GetComponent<PlayerAttack>();
     }
 }

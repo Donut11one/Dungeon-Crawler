@@ -17,10 +17,19 @@ public class PlayerWallet : NetworkBehaviour
 
     [Header("Banked Savings (Extracted money that stays with you)")]
     public NetworkVariable<int> BankedMoney = new NetworkVariable<int>(
-        0,
+        75,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
+
+    public override void OnNetworkSpawn()
+    {
+        if (IsServer && BankedMoney.Value == 0)
+        {
+            // Initial contractor signing bonus for testing and first purchases
+            BankedMoney.Value = 75;
+        }
+    }
 
     /// <summary>
     /// Backwards compatibility accessor for run money.
@@ -85,6 +94,27 @@ public class PlayerWallet : NetworkBehaviour
         }
 
         RunMoney.Value = 0;
+    }
+
+    /// <summary>
+    /// Server: Attempts to spend from persistent banked savings.
+    /// Returns true if successful and funds were deducted.
+    /// </summary>
+    public bool TrySpendBankedMoney(int amount)
+    {
+        if (!IsServer || amount <= 0)
+        {
+            return false;
+        }
+
+        if (BankedMoney.Value >= amount)
+        {
+            BankedMoney.Value -= amount;
+            Debug.Log($"[PlayerWallet] Player {OwnerClientId} spent ${amount}. Remaining Bank: ${BankedMoney.Value}");
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

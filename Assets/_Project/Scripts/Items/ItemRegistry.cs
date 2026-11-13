@@ -17,9 +17,12 @@ public static class ItemRegistry
         public string itemType;
         public int maxStack = 1;
         public int damage = 20;
-        public float attackCooldown = 0.5f;
+        public float attackCooldown = 1.2f;
+        public float attackWindup = 0.25f;
+        public float attackRecovery = 0.55f;
         public float attackRange = 2.4f;
         public float knockbackForce = 6f;
+        public int buyPrice = 25;
         public string slotColorHex = "#B0B0B0";
     }
 
@@ -134,7 +137,10 @@ public static class ItemRegistry
                 data.attackRange,
                 data.knockbackForce,
                 slotColor,
-                data.maxStack > 0 ? data.maxStack : 1
+                data.maxStack > 0 ? data.maxStack : 1,
+                data.buyPrice > 0 ? data.buyPrice : 25,
+                data.attackWindup > 0f ? data.attackWindup : 0.25f,
+                data.attackRecovery > 0f ? data.attackRecovery : 0.55f
             );
 
             Register(item);
@@ -218,5 +224,15 @@ public static class ItemRegistry
         }
 
         return !string.IsNullOrEmpty(id) && Registry.ContainsKey(id);
+    }
+
+    public static List<ItemData> GetAllItems()
+    {
+        if (!initialized)
+        {
+            Initialize();
+        }
+
+        return new List<ItemData>(Registry.Values);
     }
 }

@@ -81,6 +81,7 @@ public class PlayerController : NetworkBehaviour
     private float jumpBufferTimer;
     private float jumpCooldownTimer;
     private readonly RaycastHit[] groundHits = new RaycastHit[8];
+    private PlayerAttack playerAttack;
 
     private void Awake()
     {
@@ -88,6 +89,7 @@ public class PlayerController : NetworkBehaviour
         ragdollController = GetComponent<RagdollController>();
         playerCamera = GetComponentInChildren<Camera>();
         audioListener = GetComponentInChildren<AudioListener>();
+        playerAttack = GetComponent<PlayerAttack>();
 
         currentDistance = cameraDistance;
         targetDistance = cameraDistance;
@@ -229,6 +231,12 @@ public class PlayerController : NetworkBehaviour
         {
             jumpBufferTimer -= Time.fixedDeltaTime;
 
+            // Cannot jump while actively committed to an attack swing
+            if (playerAttack != null && playerAttack.IsAttacking)
+            {
+                return;
+            }
+
             if (CheckGrounded() && jumpCooldownTimer <= 0f)
             {
                 // Crisp vertical jump velocity
@@ -264,9 +272,36 @@ public class PlayerController : NetworkBehaviour
         }
 
         float speed = moveSpeed;
-        if (Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed)
+
+        // Apply attack commitment slow & sprint restrictions
+        if (playerAttack != null)
         {
-            speed *= sprintMultiplier;
+            if (playerAttack.CurrentCombatState.Value == PlayerCombatState.Attacking)
+            {
+                speed *= 0.25f; // Committed into attack animation: heavy slow, sprint disabled
+            }
+            else if (playerAttack.CurrentCombatState.Value == PlayerCombatState.Cooldown)
+            {
+                speed *= 0.65f; // Recovery phase slow
+                if (Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed)
+                {
+                    speed *= 1.25f;
+                }
+            }
+            else
+            {
+                if (Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed)
+                {
+                    speed *= sprintMultiplier;
+                }
+            }
+        }
+        else
+        {
+            if (Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed)
+            {
+                speed *= sprintMultiplier;
+            }
         }
 
         Vector3 moveDir = (transform.right * input.x + transform.forward * input.y).normalized;
@@ -330,6 +365,11 @@ public class PlayerController : NetworkBehaviour
 
     private void HandleLook()
     {
+        if (Cursor.lockState != CursorLockMode.Locked)
+        {
+            return;
+        }
+
         if (Mouse.current == null)
         {
             return;

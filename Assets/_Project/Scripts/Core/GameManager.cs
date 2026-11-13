@@ -67,6 +67,23 @@ public class GameManager : NetworkBehaviour
             {
                 RoundTimer.Value = 0f;
                 CurrentState.Value = GameState.RoundOver;
+
+                // Timeout in dungeon: all unextracted contractors lose their inventory!
+                if (NetworkManager.Singleton != null)
+                {
+                    foreach (NetworkClient nc in NetworkManager.Singleton.ConnectedClientsList)
+                    {
+                        if (nc.PlayerObject != null && !extractedPlayers.Contains(nc.ClientId))
+                        {
+                            PlayerInventory inv = nc.PlayerObject.GetComponent<PlayerInventory>();
+                            if (inv != null)
+                            {
+                                inv.ClearInventory();
+                            }
+                        }
+                    }
+                }
+
                 OnRoundOverClientRpc();
             }
         }
@@ -134,6 +151,7 @@ public class GameManager : NetworkBehaviour
             }
         }
 
+        extractedPlayers.Clear();
         Physics.SyncTransforms();
 
         // Transition to Playing state
@@ -249,7 +267,6 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        extractedPlayers.Clear();
         RoundTimer.Value = 0f;
 
         DungeonBuilder dungeonBuilder = FindAnyObjectByType<DungeonBuilder>();
@@ -266,6 +283,17 @@ public class GameManager : NetworkBehaviour
                 if (client.PlayerObject == null)
                 {
                     continue;
+                }
+
+                // If contractor died or failed to extract in time, their items disappear!
+                // If they extracted in time, their items stay with them!
+                if (!extractedPlayers.Contains(client.ClientId))
+                {
+                    PlayerInventory inv = client.PlayerObject.GetComponent<PlayerInventory>();
+                    if (inv != null)
+                    {
+                        inv.ClearInventory();
+                    }
                 }
 
                 Vector3 lobbySpawn = LobbyArea.Instance != null
@@ -294,6 +322,7 @@ public class GameManager : NetworkBehaviour
             }
         }
 
+        extractedPlayers.Clear();
         Physics.SyncTransforms();
 
         CurrentState.Value = GameState.Lobby;
@@ -363,6 +392,7 @@ public class GameManager : NetworkBehaviour
             }
         }
 
+        extractedPlayers.Clear();
         Physics.SyncTransforms();
 
         CurrentState.Value = GameState.Playing;

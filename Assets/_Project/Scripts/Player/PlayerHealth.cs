@@ -146,6 +146,16 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         IsDead.Value = true;
         respawnTimer = respawnDelay;
 
+        // Death in dungeon: carried items disappear!
+        if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value == GameManager.GameState.Playing)
+        {
+            PlayerInventory inv = GetComponent<PlayerInventory>();
+            if (inv != null)
+            {
+                inv.ClearInventory();
+            }
+        }
+
         // Big death ragdoll
         if (ragdollController != null)
         {

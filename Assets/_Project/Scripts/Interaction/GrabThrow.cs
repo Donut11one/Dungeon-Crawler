@@ -67,6 +67,11 @@ public class GrabThrow : NetworkBehaviour
             return;
         }
 
+        if (Cursor.lockState != CursorLockMode.Locked)
+        {
+            return;
+        }
+
         bool rightClicked = Mouse.current.rightButton.wasPressedThisFrame;
         bool ePressed = Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame;
 

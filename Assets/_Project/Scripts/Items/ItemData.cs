@@ -29,9 +29,14 @@ public class ItemData : ScriptableObject
 
     [Header("Combat (Weapons / Tools / Fists)")]
     [SerializeField] private int damage = 25;
-    [SerializeField] private float attackCooldown = 0.5f;
+    [SerializeField] private float attackCooldown = 1.2f;
+    [SerializeField] private float attackWindup = 0.25f;
+    [SerializeField] private float attackRecovery = 0.55f;
     [SerializeField] private float attackRange = 2.4f;
     [SerializeField] private float knockbackForce = 7f;
+
+    [Header("Shop Economy")]
+    [SerializeField] private int buyPrice = 25;
 
     [Header("World Prefabs")]
     [SerializeField] private GameObject worldPrefab;
@@ -109,6 +114,22 @@ public class ItemData : ScriptableObject
         }
     }
 
+    public float AttackWindup
+    {
+        get
+        {
+            return attackWindup > 0f ? attackWindup : 0.25f;
+        }
+    }
+
+    public float AttackRecovery
+    {
+        get
+        {
+            return attackRecovery > 0f ? attackRecovery : 0.55f;
+        }
+    }
+
     public float AttackRange
     {
         get
@@ -141,6 +162,14 @@ public class ItemData : ScriptableObject
         }
     }
 
+    public int BuyPrice
+    {
+        get
+        {
+            return buyPrice;
+        }
+    }
+
     /// <summary>
     /// Factory helper for creating runtime ItemData definitions in code without needing asset files.
     /// </summary>
@@ -154,7 +183,10 @@ public class ItemData : ScriptableObject
         float range,
         float knockback,
         Color color,
-        int stack = 1)
+        int stack = 1,
+        int price = 25,
+        float windup = 0.25f,
+        float recovery = 0.55f)
     {
         ItemData item = CreateInstance<ItemData>();
         item.itemId = id;
@@ -167,6 +199,9 @@ public class ItemData : ScriptableObject
         item.knockbackForce = knockback;
         item.slotColor = color;
         item.maxStack = stack;
+        item.buyPrice = price;
+        item.attackWindup = windup;
+        item.attackRecovery = recovery;
         return item;
     }
 
