@@ -324,7 +324,7 @@ Rigidbody:
   m_GameObject: {fileID: 7297492257591209784}
   serializedVersion: 5
   m_Mass: 70
-  m_LinearDamping: 6
+  m_LinearDamping: 0
   m_AngularDamping: 10
   m_CenterOfMass: {x: 0, y: 0, z: 0}
   m_InertiaTensor: {x: 1, y: 1, z: 1}
@@ -426,7 +426,12 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   moveSpeed: 6
   sprintMultiplier: 1.5
-  groundDrag: 6
+  airAcceleration: 25
+  jumpForce: 5.5
+  jumpCooldown: 0.2
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
   lookSensitivity: 0.15
   maxLookAngle: 85
   cameraHolder: {fileID: 6845593052548549327}

@@ -302,11 +302,11 @@ public class GameHUD : MonoBehaviour
 
         if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby)
         {
-            GUI.Label(rect, "[WASD] Move   |   [F] Agree to Dive / Cancel   |   Step on ELEVATOR PLATFORM to Ready Up", hintStyle);
+            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [F] Agree to Dive / Cancel   |   Step on ELEVATOR PLATFORM to Ready Up", hintStyle);
         }
         else
         {
-            GUI.Label(rect, "[E / Left Click] Pick Up/Drop   |   [Right Click] Throw   |   Reach GREEN ZONE to extract!", hintStyle);
+            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [E / Left Click] Pick Up/Drop   |   [Right Click] Throw   |   GREEN ZONE to extract!", hintStyle);
         }
     }
 

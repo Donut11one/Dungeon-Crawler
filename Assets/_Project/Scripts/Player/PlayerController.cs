@@ -7,6 +7,7 @@ using UnityEngine.InputSystem;
 /// Rigidbody allows seamless ragdoll transitions — when ragdolled,
 /// physics takes over; when recovered, player regains control.
 /// Only processes input on the owning client.
+/// Supports walking, sprinting, jumping with input buffering, and air control.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(CapsuleCollider))]
@@ -15,7 +16,12 @@ public class PlayerController : NetworkBehaviour
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 6f;
     [SerializeField] private float sprintMultiplier = 1.5f;
-    [SerializeField] private float groundDrag = 6f;
+    [SerializeField] private float airAcceleration = 25f;
+
+    [Header("Jumping")]
+    [SerializeField] private float jumpForce = 5.5f;
+    [SerializeField] private float jumpCooldown = 0.2f;
+    [SerializeField] private LayerMask groundMask = ~0;
 
     [Header("Look")]
     [SerializeField] private float lookSensitivity = 0.15f;
@@ -43,11 +49,17 @@ public class PlayerController : NetworkBehaviour
         Debug.Log($"[PlayerController] Player {OwnerClientId} Ready state set to {ready}");
     }
 
+    public bool IsGrounded => CheckGrounded();
+
     private Rigidbody rb;
     private RagdollController ragdollController;
     private Camera playerCamera;
     private AudioListener audioListener;
     private float xRotation;
+
+    private float jumpBufferTimer;
+    private float jumpCooldownTimer;
+    private readonly RaycastHit[] groundHits = new RaycastHit[8];
 
     private void Awake()
     {
@@ -96,7 +108,7 @@ public class PlayerController : NetworkBehaviour
             rb.isKinematic = false;
             rb.freezeRotation = true;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
-            rb.linearDamping = groundDrag;
+            rb.linearDamping = 0f; // Zero damping so gravity and jumping are crisp and realistic
         }
     }
 
@@ -125,6 +137,12 @@ public class PlayerController : NetworkBehaviour
         }
 
         HandleLook();
+
+        // Capture jump input in Update so key presses are never missed between physics ticks
+        if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+        {
+            jumpBufferTimer = 0.15f; // 150ms input buffer
+        }
     }
 
     private void FixedUpdate()
@@ -138,12 +156,34 @@ public class PlayerController : NetworkBehaviour
             return;
         }
 
+        HandleJump();
         HandleMovement();
     }
 
     private bool IsRagdolled()
     {
         return ragdollController != null && ragdollController.IsRagdolled.Value;
+    }
+
+    private void HandleJump()
+    {
+        if (jumpCooldownTimer > 0f)
+        {
+            jumpCooldownTimer -= Time.fixedDeltaTime;
+        }
+
+        if (jumpBufferTimer > 0f)
+        {
+            jumpBufferTimer -= Time.fixedDeltaTime;
+
+            if (CheckGrounded() && jumpCooldownTimer <= 0f)
+            {
+                // Crisp vertical jump velocity
+                rb.linearVelocity = new Vector3(rb.linearVelocity.x, jumpForce, rb.linearVelocity.z);
+                jumpCooldownTimer = jumpCooldown;
+                jumpBufferTimer = 0f;
+            }
+        }
     }
 
     private void HandleMovement()
@@ -179,7 +219,60 @@ public class PlayerController : NetworkBehaviour
         Vector3 moveDir = (transform.right * input.x + transform.forward * input.y).normalized;
         Vector3 targetVelocity = moveDir * speed;
 
-        rb.linearVelocity = new Vector3(targetVelocity.x, rb.linearVelocity.y, targetVelocity.z);
+        bool grounded = CheckGrounded();
+
+        if (grounded)
+        {
+            // Crisp, instantaneous ground movement with no sliding
+            rb.linearVelocity = new Vector3(targetVelocity.x, rb.linearVelocity.y, targetVelocity.z);
+        }
+        else
+        {
+            // Mid-air: preserve momentum, allow smooth air steering
+            if (input.sqrMagnitude > 0.01f)
+            {
+                Vector3 currentHoriz = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+                Vector3 newHoriz = Vector3.MoveTowards(currentHoriz, targetVelocity, airAcceleration * Time.fixedDeltaTime);
+                rb.linearVelocity = new Vector3(newHoriz.x, rb.linearVelocity.y, newHoriz.z);
+            }
+        }
+    }
+
+    private bool CheckGrounded()
+    {
+        Vector3 origin = transform.position + Vector3.up * 0.35f;
+        float radius = 0.3f;
+        float castDistance = 0.25f;
+
+        int count = Physics.SphereCastNonAlloc(
+            origin,
+            radius,
+            Vector3.down,
+            groundHits,
+            castDistance,
+            groundMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        for (int i = 0; i < count; i++)
+        {
+            Collider col = groundHits[i].collider;
+            if (col != null && !col.isTrigger && !col.transform.IsChildOf(transform))
+            {
+                return true;
+            }
+        }
+
+        // Direct center raycast fallback for narrow ledges or edges
+        if (Physics.Raycast(transform.position + Vector3.up * 0.2f, Vector3.down, out RaycastHit hit, 0.35f, groundMask, QueryTriggerInteraction.Ignore))
+        {
+            if (hit.collider != null && !hit.collider.isTrigger && !hit.collider.transform.IsChildOf(transform))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void HandleLook()
@@ -216,6 +309,8 @@ public class PlayerController : NetworkBehaviour
     public void ResetAfterRagdoll(float currentYaw)
     {
         xRotation = 0f;
+        jumpBufferTimer = 0f;
+        jumpCooldownTimer = 0.2f;
 
         if (IsOwner && IsSpawned)
         {
@@ -234,6 +329,7 @@ public class PlayerController : NetworkBehaviour
             rb.freezeRotation = true;
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
+            rb.linearDamping = 0f;
         }
     }
 }
