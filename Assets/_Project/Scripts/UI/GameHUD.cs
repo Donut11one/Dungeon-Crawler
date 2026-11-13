@@ -150,7 +150,6 @@ public class GameHUD : MonoBehaviour
         DrawTimer();
         DrawHealth();
         DrawMoney();
-        DrawRagdollStatus();
         DrawControlsHint();
         DrawConnectionInfo();
         DrawRoundState();
@@ -253,41 +252,6 @@ public class GameHUD : MonoBehaviour
         }
     }
 
-    private void DrawRagdollStatus()
-    {
-        if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null)
-        {
-            return;
-        }
-
-        NetworkObject playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
-        if (playerObj == null)
-        {
-            return;
-        }
-
-        RagdollController ragdoll = playerObj.GetComponent<RagdollController>();
-        if (ragdoll != null && ragdoll.IsRagdolled.Value)
-        {
-            PlayerHealth health = playerObj.GetComponent<PlayerHealth>();
-            if (health != null && health.IsDead.Value)
-            {
-                return;
-            }
-
-            float timeLeft = ragdoll.RemainingRecoveryTime.Value;
-            GUIStyle ragdollStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 26,
-                alignment = TextAnchor.MiddleCenter,
-                fontStyle = FontStyle.Bold
-            };
-            ragdollStyle.normal.textColor = Color.yellow;
-
-            Rect rect = new Rect(0f, Screen.height / 2f + 40f, Screen.width, 35f);
-            GUI.Label(rect, $"KNOCKED DOWN! Standing up in {timeLeft:0.0}s...", ragdollStyle);
-        }
-    }
 
     private void DrawControlsHint()
     {

@@ -40,6 +40,16 @@ public class DungeonBuilder : NetworkBehaviour
     private readonly System.Collections.Generic.List<GameObject>  spawnedEnemies    = new();
 
     // ── Public API ───────────────────────────────────────────────────────────
+    public GameObject CoinPrefab => coinPrefab;
+
+    public void TrackSpawnedCoin(GameObject coin)
+    {
+        if (coin != null && !spawnedCoins.Contains(coin))
+        {
+            spawnedCoins.Add(coin);
+        }
+    }
+
     public Vector3 GetPlayerSpawnPoint(int index)
     {
         if (playerSpawnPoints.Count == 0)
@@ -159,7 +169,7 @@ public class DungeonBuilder : NetworkBehaviour
                new Vector3( 0f, 0.8f, -5f),
                new Vector3(-5f, 0.8f, -5f),
                new Vector3( 4f, 0.8f, -4f));
-        enemySpawnPoints.Add(new Vector3(0f, 0.5f, 6f));
+        // NOTE: No enemies spawn in the starting room (MainHall)
 
         // ── NORTH CORRIDOR (4 × 14, centre 0,0,15) ──────────────────────────
         //   south edge z=8  →  meets MainHall north  (depth/2=7, centre.z=15, z=15-7=8 ✓)
@@ -170,6 +180,7 @@ public class DungeonBuilder : NetworkBehaviour
 
         Coins( new Vector3( 1f, 0.8f, 13f),
                new Vector3(-1f, 0.8f, 17f));
+        enemySpawnPoints.Add(new Vector3(0f, 0.5f, 15f));
 
         // ── NORTH STORAGE (10 × 8, centre 0,0,26) ───────────────────────────
         //   south edge z=22  (depth/2=4, centre.z=26, z=26-4=22 ✓)
@@ -200,6 +211,7 @@ public class DungeonBuilder : NetworkBehaviour
 
         Coins( new Vector3(25f, 0.8f, -3f),
                new Vector3(27f, 0.8f,  3f));
+        enemySpawnPoints.Add(new Vector3(26f, 0.5f, 3f));
 
         // ── WEST CORRIDOR (12 × 4, centre -14,0,0) ──────────────────────────
         //   east edge x=-8  (width/2=6, centre.x=-14, x=-14+6=-8 ✓)
@@ -216,6 +228,7 @@ public class DungeonBuilder : NetworkBehaviour
         Coins( new Vector3(-23f, 0.8f,  0f),
                new Vector3(-21f, 0.8f,  2f),
                new Vector3(-24f, 0.8f, -2f));
+        enemySpawnPoints.Add(new Vector3(-23f, 0.5f, 0f));
 
         // NavMesh surface
         navSurface = dungeonRoot.AddComponent<NavMeshSurface>();

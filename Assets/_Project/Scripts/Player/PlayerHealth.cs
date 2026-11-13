@@ -12,6 +12,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     [SerializeField] private float knockbackMultiplier = 2f;
     [SerializeField] private float respawnDelay = 4f;
 
+    [Header("Damage Settings")]
+    [SerializeField] private float damageCooldown = 1.2f;
+
     public NetworkVariable<int> CurrentHealth = new NetworkVariable<int>(
         100,
         NetworkVariableReadPermission.Everyone,
@@ -27,6 +30,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     private RagdollController ragdollController;
     private Vector3 spawnPosition;
     private float respawnTimer;
+    private float damageCooldownTimer;
 
     private void Awake()
     {
@@ -62,6 +66,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             return;
         }
 
+        if (damageCooldownTimer > 0f)
+        {
+            damageCooldownTimer -= Time.deltaTime;
+        }
+
         if (IsDead.Value)
         {
             respawnTimer -= Time.deltaTime;
@@ -74,6 +83,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     /// <summary>
     /// Server-side: Apply damage and knockback to this player.
+    /// Uses damageCooldown to prevent rapid multi-hit spam.
     /// </summary>
     public void TakeDamage(int damage, Vector3 hitDirection)
     {
@@ -85,7 +95,12 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         {
             return;
         }
+        if (damageCooldownTimer > 0f)
+        {
+            return;
+        }
 
+        damageCooldownTimer = damageCooldown;
         CurrentHealth.Value -= damage;
 
         // Ragdoll on any hit
@@ -153,6 +168,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         spawnPosition = newSpawnPosition;
         IsDead.Value = false;
         CurrentHealth.Value = maxHealth;
+        damageCooldownTimer = 0f;
         transform.position = newSpawnPosition;
 
         if (ragdollController != null)
