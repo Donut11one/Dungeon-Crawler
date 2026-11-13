@@ -21,7 +21,22 @@ public class GrabThrow : NetworkBehaviour
     private Collider playerCollider;
 
     /// <summary>The position where held items float in front of the player.</summary>
-    public Transform HoldPoint => holdPoint;
+    public Transform HoldPoint
+    {
+        get
+        {
+            return holdPoint;
+        }
+    }
+
+    /// <summary>Whether the player is currently carrying a grabbed heavy object (e.g. barrel).</summary>
+    public bool IsHoldingObject
+    {
+        get
+        {
+            return heldObject != null;
+        }
+    }
 
     private void Awake()
     {
@@ -52,7 +67,6 @@ public class GrabThrow : NetworkBehaviour
             return;
         }
 
-        bool leftClicked = Mouse.current.leftButton.wasPressedThisFrame;
         bool rightClicked = Mouse.current.rightButton.wasPressedThisFrame;
         bool ePressed = Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame;
 
@@ -63,16 +77,15 @@ public class GrabThrow : NetworkBehaviour
             return;
         }
 
-        // LEFT-CLICK or E: Grab if empty, or drop if already holding
-        if (leftClicked || ePressed)
+        // E: Grab if empty, or Drop if already holding
+        if (ePressed)
         {
             if (heldObject == null)
             {
                 TryGrab();
             }
-            else if (leftClicked)
+            else
             {
-                // Left click while holding drops gently
                 Drop();
             }
         }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
@@ -424,6 +425,7 @@ public class DungeonBuilder : NetworkBehaviour
         }
 
         int count = Mathf.Min(enemyCount, enemySpawnPoints.Count);
+        List<EnemyData> allEnemies = EnemyRegistry.GetAllEnemies();
         for (int i = 0; i < count; i++)
         {
             GameObject e = Instantiate(enemyPrefab, enemySpawnPoints[i], Quaternion.identity);
@@ -432,6 +434,15 @@ public class DungeonBuilder : NetworkBehaviour
             {
                 no.Spawn();
             }
+
+            // Assign varied enemy archetype from JSON database
+            EnemyHealth eh = e.GetComponent<EnemyHealth>();
+            if (eh != null && allEnemies != null && allEnemies.Count > 0)
+            {
+                EnemyData chosenData = allEnemies[i % allEnemies.Count];
+                eh.ApplyEnemyData(chosenData);
+            }
+
             spawnedEnemies.Add(e);
         }
     }

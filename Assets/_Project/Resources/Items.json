@@ -1,0 +1,100 @@
+{
+  "items": [
+    {
+      "itemId": "scrap_pipe",
+      "displayName": "Iron Pipe",
+      "description": "Heavy salvaged plumbing pipe. Sturdy enough to crack monster skulls.",
+      "itemType": "Weapon",
+      "maxStack": 1,
+      "damage": 35,
+      "attackCooldown": 0.55,
+      "attackRange": 2.6,
+      "knockbackForce": 9.0,
+      "slotColorHex": "#B3B8C7"
+    },
+    {
+      "itemId": "crowbar",
+      "displayName": "Crowbar",
+      "description": "Classic utility prybar. Fast swings with moderate concussive knockback.",
+      "itemType": "Weapon",
+      "maxStack": 1,
+      "damage": 28,
+      "attackCooldown": 0.45,
+      "attackRange": 2.4,
+      "knockbackForce": 7.5,
+      "slotColorHex": "#D9594C"
+    },
+    {
+      "itemId": "stun_baton",
+      "displayName": "Stun Baton",
+      "description": "Security guard riot baton. Delivers immense concussive knockback.",
+      "itemType": "Weapon",
+      "maxStack": 1,
+      "damage": 22,
+      "attackCooldown": 0.6,
+      "attackRange": 2.5,
+      "knockbackForce": 14.0,
+      "slotColorHex": "#33BFE6"
+    },
+    {
+      "itemId": "wrench",
+      "displayName": "Heavy Wrench",
+      "description": "Industrial pipe wrench. Slow swing but deals crushing blunt damage.",
+      "itemType": "Weapon",
+      "maxStack": 1,
+      "damage": 45,
+      "attackCooldown": 0.75,
+      "attackRange": 2.3,
+      "knockbackForce": 12.0,
+      "slotColorHex": "#E69933"
+    },
+    {
+      "itemId": "medkit",
+      "displayName": "First Aid",
+      "description": "Emergency medical kit. Restores contractor health.",
+      "itemType": "Consumable",
+      "maxStack": 5,
+      "damage": 0,
+      "attackCooldown": 1.0,
+      "attackRange": 1.5,
+      "knockbackForce": 0.0,
+      "slotColorHex": "#40D959"
+    },
+    {
+      "itemId": "flashlight",
+      "displayName": "Flashlight",
+      "description": "Heavy-duty tactical torch. Illuminates subterranean darkness.",
+      "itemType": "Tool",
+      "maxStack": 1,
+      "damage": 5,
+      "attackCooldown": 0.4,
+      "attackRange": 2.0,
+      "knockbackForce": 3.0,
+      "slotColorHex": "#F5E642"
+    },
+    {
+      "itemId": "abnormality_core",
+      "displayName": "Monster Core",
+      "description": "Glowing bio-mechanical core salvaged from an abnormality. Highly valuable.",
+      "itemType": "Scrap",
+      "maxStack": 10,
+      "damage": 10,
+      "attackCooldown": 0.8,
+      "attackRange": 2.0,
+      "knockbackForce": 4.0,
+      "slotColorHex": "#E633D9"
+    },
+    {
+      "itemId": "gold_scrap",
+      "displayName": "Relic Circuitry",
+      "description": "Intact golden circuit board salvaged from pre-collapse machinery.",
+      "itemType": "Scrap",
+      "maxStack": 10,
+      "damage": 5,
+      "attackCooldown": 0.5,
+      "attackRange": 2.0,
+      "knockbackForce": 2.0,
+      "slotColorHex": "#FFD700"
+    }
+  ]
+}

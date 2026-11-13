@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -18,6 +19,29 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
 
     [Header("Damage Settings")]
     [SerializeField] private float damageCooldown = 0.5f;
+
+    public NetworkVariable<FixedString32Bytes> EnemyId = new NetworkVariable<FixedString32Bytes>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public string DisplayName
+    {
+        get
+        {
+            string id = EnemyId.Value.ToString();
+            if (!string.IsNullOrEmpty(id))
+            {
+                EnemyData data = EnemyRegistry.GetEnemy(id);
+                if (data != null && !string.IsNullOrEmpty(data.displayName))
+                {
+                    return data.displayName;
+                }
+            }
+            return "Containment Abnormality";
+        }
+    }
 
     public int MaxHealth
     {
@@ -71,9 +95,80 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
 
     public override void OnNetworkSpawn()
     {
+        EnemyRegistry.Initialize();
+        EnemyId.OnValueChanged += OnEnemyIdChanged;
+
         if (IsServer)
         {
-            CurrentHealth.Value = maxHealth;
+            if (EnemyId.Value.IsEmpty)
+            {
+                EnemyData defaultData = EnemyRegistry.GetDefaultEnemy();
+                ApplyEnemyData(defaultData);
+            }
+            else
+            {
+                CurrentHealth.Value = maxHealth;
+            }
+        }
+        else
+        {
+            // Client side visual sync
+            UpdateClientVisuals();
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        EnemyId.OnValueChanged -= OnEnemyIdChanged;
+    }
+
+    private void OnEnemyIdChanged(FixedString32Bytes previous, FixedString32Bytes current)
+    {
+        UpdateClientVisuals();
+    }
+
+    private void UpdateClientVisuals()
+    {
+        string id = EnemyId.Value.ToString();
+        if (!string.IsNullOrEmpty(id))
+        {
+            EnemyData data = EnemyRegistry.GetEnemy(id);
+            if (data != null)
+            {
+                if (enemyAI == null)
+                {
+                    enemyAI = GetComponent<BasicEnemyAI>();
+                }
+                if (enemyAI != null)
+                {
+                    enemyAI.ApplyEnemyData(data);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies stats and visuals from the EnemyData parsed from Enemies.json.
+    /// </summary>
+    public void ApplyEnemyData(EnemyData data)
+    {
+        if (data == null)
+        {
+            return;
+        }
+
+        EnemyId.Value = new FixedString32Bytes(data.enemyId);
+        maxHealth = data.maxHealth;
+        CurrentHealth.Value = data.maxHealth;
+
+        if (enemyAI == null)
+        {
+            enemyAI = GetComponent<BasicEnemyAI>();
+        }
+
+        if (enemyAI != null)
+        {
+            enemyAI.ApplyEnemyData(data);
         }
     }
 
@@ -144,6 +239,12 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
             CurrentHealth.Value = 0;
             HandleDeath();
         }
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void TakeDamageServerRpc(int damage, Vector3 hitDirection)
+    {
+        TakeDamage(damage, hitDirection);
     }
 
     private void HandleDeath()

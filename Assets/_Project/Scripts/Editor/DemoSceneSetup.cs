@@ -192,6 +192,9 @@ public static class DemoSceneSetup
         PlayerController controller = player.AddComponent<PlayerController>();
         player.AddComponent<RagdollController>();
         player.AddComponent<PlayerHealth>();
+        player.AddComponent<PlayerWallet>();
+        player.AddComponent<PlayerInventory>();
+        player.AddComponent<PlayerAttack>();
         GrabThrow grabThrow = player.AddComponent<GrabThrow>();
 
         // Wire up serialized references

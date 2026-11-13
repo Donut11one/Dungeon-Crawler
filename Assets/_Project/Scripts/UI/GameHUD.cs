@@ -170,6 +170,7 @@ public class GameHUD : MonoBehaviour
         DrawTimer();
         DrawHealth();
         DrawMoney();
+        DrawHotbar();
         DrawControlsHint();
         DrawConnectionInfo();
         DrawRoundState();
@@ -273,6 +274,115 @@ public class GameHUD : MonoBehaviour
     }
 
 
+    private void DrawHotbar()
+    {
+        PlayerInventory inventory = FindLocalPlayerInventory();
+        if (inventory == null)
+        {
+            return;
+        }
+
+        int slotCount = PlayerInventory.HotbarSlotCount;
+        float slotSize = 46f;
+        float slotSpacing = 6f;
+        float totalWidth = slotCount * slotSize + (slotCount - 1) * slotSpacing;
+
+        float startX = (Screen.width - totalWidth) * 0.5f;
+        float startY = Screen.height - 90f;
+
+        int selectedSlot = inventory.SelectedSlotIndex.Value;
+
+        // Draw active item name centered above the hotbar (Minecraft style!)
+        ItemData activeItem = inventory.GetSelectedItem();
+        string activeName = activeItem != null ? activeItem.DisplayName.ToUpper() : "FISTS";
+        Color activeColor = activeItem != null ? activeItem.SlotColor : new Color(0.9f, 0.9f, 0.9f);
+
+        GUIStyle activeItemStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 13,
+            alignment = TextAnchor.MiddleCenter,
+            fontStyle = FontStyle.Bold
+        };
+        activeItemStyle.normal.textColor = activeColor;
+        GUI.Label(new Rect(startX - 50f, startY - 20f, totalWidth + 100f, 18f), $"[ {activeName} ]", activeItemStyle);
+
+        GUIStyle slotNumStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 10,
+            alignment = TextAnchor.UpperLeft,
+            fontStyle = FontStyle.Bold
+        };
+        slotNumStyle.normal.textColor = new Color(0.75f, 0.75f, 0.75f, 0.8f);
+
+        GUIStyle itemNameStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 10,
+            alignment = TextAnchor.MiddleCenter,
+            fontStyle = FontStyle.Bold
+        };
+
+        GUIStyle countStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 10,
+            alignment = TextAnchor.LowerRight,
+            fontStyle = FontStyle.Bold
+        };
+        countStyle.normal.textColor = Color.yellow;
+
+        for (int i = 0; i < slotCount; i++)
+        {
+            float x = startX + i * (slotSize + slotSpacing);
+            float y = startY;
+            Rect slotRect = new Rect(x, y, slotSize, slotSize);
+
+            bool isSelected = (i == selectedSlot);
+
+            // Slot outer border (Thick gold border for selected slot!)
+            if (isSelected)
+            {
+                DrawSolidRect(new Rect(x - 3f, y - 3f, slotSize + 6f, slotSize + 6f), new Color(1f, 0.85f, 0.2f, 0.95f));
+                DrawSolidRect(slotRect, new Color(0.22f, 0.22f, 0.22f, 0.9f));
+            }
+            else
+            {
+                DrawSolidRect(new Rect(x - 1f, y - 1f, slotSize + 2f, slotSize + 2f), new Color(0.08f, 0.08f, 0.08f, 0.85f));
+                DrawSolidRect(slotRect, new Color(0.14f, 0.14f, 0.14f, 0.75f));
+            }
+
+            // Slot number indicator "1", "2"...
+            GUI.Label(new Rect(x + 3f, y + 2f, 20f, 14f), $"{i + 1}", slotNumStyle);
+
+            InventorySlot slot = inventory.GetSlot(i);
+            if (!slot.IsEmpty)
+            {
+                ItemData item = ItemRegistry.GetItem(slot.itemId.ToString());
+                if (item != null)
+                {
+                    // Rudimentary colored inner box representing the item
+                    float iconSize = 20f;
+                    Rect iconRect = new Rect(x + (slotSize - iconSize) * 0.5f, y + 9f, iconSize, iconSize);
+                    DrawSolidRect(iconRect, item.SlotColor);
+
+                    // Short display label
+                    string shortName = item.DisplayName.Length > 6 ? item.DisplayName.Substring(0, 5) + "." : item.DisplayName;
+                    itemNameStyle.normal.textColor = Color.white;
+                    GUI.Label(new Rect(x, y + 28f, slotSize, 16f), shortName, itemNameStyle);
+
+                    if (slot.count > 1)
+                    {
+                        GUI.Label(new Rect(x, y, slotSize - 3f, slotSize - 2f), $"{slot.count}", countStyle);
+                    }
+                }
+            }
+            else if (isSelected)
+            {
+                // Selected empty slot shows "Fist"
+                itemNameStyle.normal.textColor = new Color(0.8f, 0.8f, 0.8f, 0.7f);
+                GUI.Label(new Rect(x, y + 15f, slotSize, 20f), "Fist", itemNameStyle);
+            }
+        }
+    }
+
     private void DrawControlsHint()
     {
         GUIStyle hintStyle = new GUIStyle(GUI.skin.label)
@@ -286,11 +396,11 @@ public class GameHUD : MonoBehaviour
 
         if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby)
         {
-            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [F] Agree to Dive / Cancel   |   Step on ELEVATOR PLATFORM to Ready Up", hintStyle);
+            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack / Fist   |   [E] Pick Up/Drop   |   [F] Agree to Dive", hintStyle);
         }
         else
         {
-            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [E / Left Click] Pick Up/Drop   |   [Right Click] Throw   |   GREEN ZONE to extract!", hintStyle);
+            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack / Fist   |   [E] Pick Up/Drop   |   [Right Click] Throw", hintStyle);
         }
     }
 
@@ -514,9 +624,20 @@ public class GameHUD : MonoBehaviour
                 DrawSolidRect(new Rect(barX, barY, barW * pct, barH), fillColor);
             }
 
-            // Text label above the floating bar
-            enemyBarTextStyle.normal.textColor = new Color(1f, 1f, 1f, 0.9f * alpha);
-            GUI.Label(new Rect(barX - 20f, barY - 13f, barW + 40f, 13f), $"{enemyHp} / {enemyMaxHp}", enemyBarTextStyle);
+            // Enemy name above the floating bar
+            string enemyName = enemy.DisplayName;
+            GUIStyle enemyNameStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 11,
+                alignment = TextAnchor.LowerCenter,
+                fontStyle = FontStyle.Bold
+            };
+            enemyNameStyle.normal.textColor = new Color(1f, 1f, 1f, 0.95f * alpha);
+            GUI.Label(new Rect(guiX - 100f, barY - 17f, 200f, 16f), enemyName, enemyNameStyle);
+
+            // HP numbers below the floating bar
+            enemyBarTextStyle.normal.textColor = new Color(0.9f, 0.9f, 0.9f, 0.85f * alpha);
+            GUI.Label(new Rect(barX - 20f, barY + barH + 1f, barW + 40f, 13f), $"{enemyHp} / {enemyMaxHp}", enemyBarTextStyle);
         }
     }
 
@@ -848,5 +969,21 @@ public class GameHUD : MonoBehaviour
         }
 
         return playerObj.GetComponent<PlayerWallet>();
+    }
+
+    private PlayerInventory FindLocalPlayerInventory()
+    {
+        if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null)
+        {
+            return null;
+        }
+
+        NetworkObject playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
+        if (playerObj == null)
+        {
+            return null;
+        }
+
+        return playerObj.GetComponent<PlayerInventory>();
     }
 }

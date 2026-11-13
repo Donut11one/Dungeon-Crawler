@@ -189,6 +189,39 @@ public class BasicEnemyAI : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Applies movement speeds, ranges, attack stats, and base colors from JSON-loaded EnemyData.
+    /// </summary>
+    public void ApplyEnemyData(EnemyData data)
+    {
+        if (data == null)
+        {
+            return;
+        }
+
+        chaseSpeed = data.chaseSpeed;
+        wanderSpeed = data.wanderSpeed;
+        aggroRange = data.aggroRange;
+        loseTargetRange = data.loseTargetRange;
+        directProximityRange = data.directProximityRange;
+        attackRange = data.attackRange;
+        attackDamage = data.attackDamage;
+        attackCooldown = data.attackCooldown;
+        attackWindup = data.attackWindup;
+        attackRecovery = data.attackRecovery;
+        attackKnockback = data.attackKnockback;
+
+        idleBodyColor = data.GetBodyColor();
+        idleEyeColor = data.GetEyeColor();
+
+        if (agent != null && agent.enabled)
+        {
+            agent.speed = wanderSpeed;
+        }
+
+        UpdateStateVisuals(CurrentCombatState.Value);
+    }
+
     private void ApplyColor(Renderer rend, Color color)
     {
         if (rend == null)
