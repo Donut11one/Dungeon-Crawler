@@ -34,7 +34,7 @@ public class BasicEnemyAI : NetworkBehaviour
 
     [Header("Attack & Cooldown")]
     [SerializeField] private float attackRange = 2.2f;
-    [SerializeField] private float attackCooldown = 3.0f;
+    [SerializeField] private float attackCooldown = 7.0f;
     [SerializeField] private float attackWindup = 0.35f;
     [SerializeField] private float attackRecovery = 1.2f;
     [SerializeField] private int attackDamage = 20;
