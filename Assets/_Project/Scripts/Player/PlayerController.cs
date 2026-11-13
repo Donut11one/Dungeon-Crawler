@@ -27,6 +27,16 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private float lookSensitivity = 0.15f;
     [SerializeField] private float maxLookAngle = 85f;
 
+    [Header("Third Person Camera")]
+    [SerializeField] private float cameraDistance = 2.8f;
+    [SerializeField] private float cameraHeight = 0.35f;
+    [SerializeField] private float shoulderOffset = 0.35f;
+    [SerializeField] private float minCameraDistance = 0.8f;
+    [SerializeField] private float maxCameraDistance = 4.5f;
+    [SerializeField] private float cameraCollisionRadius = 0.2f;
+    [SerializeField] private float zoomSpeed = 8f;
+    [SerializeField] private LayerMask cameraCollisionMask = ~0;
+
     [Header("References")]
     [SerializeField] private Transform cameraHolder;
 
@@ -49,13 +59,24 @@ public class PlayerController : NetworkBehaviour
         Debug.Log($"[PlayerController] Player {OwnerClientId} Ready state set to {ready}");
     }
 
-    public bool IsGrounded => CheckGrounded();
+    public bool IsGrounded
+    {
+        get
+        {
+            return CheckGrounded();
+        }
+    }
 
     private Rigidbody rb;
     private RagdollController ragdollController;
     private Camera playerCamera;
     private AudioListener audioListener;
     private float xRotation;
+
+    private float currentDistance;
+    private float targetDistance;
+    private float ragdollYaw;
+    private bool wasRagdolledLastFrame;
 
     private float jumpBufferTimer;
     private float jumpCooldownTimer;
@@ -67,6 +88,9 @@ public class PlayerController : NetworkBehaviour
         ragdollController = GetComponent<RagdollController>();
         playerCamera = GetComponentInChildren<Camera>();
         audioListener = GetComponentInChildren<AudioListener>();
+
+        currentDistance = cameraDistance;
+        targetDistance = cameraDistance;
     }
 
     public override void OnNetworkSpawn()
@@ -131,11 +155,30 @@ public class PlayerController : NetworkBehaviour
         {
             return;
         }
-        if (IsRagdolled())
+
+        // Handle camera zoom via mouse scroll wheel
+        if (Mouse.current != null)
         {
+            float scroll = Mouse.current.scroll.ReadValue().y;
+            if (Mathf.Abs(scroll) > 0.01f)
+            {
+                targetDistance = Mathf.Clamp(targetDistance - scroll * 0.003f, minCameraDistance, maxCameraDistance);
+            }
+        }
+
+        bool isRagdolledNow = IsRagdolled();
+        if (isRagdolledNow)
+        {
+            if (!wasRagdolledLastFrame)
+            {
+                ragdollYaw = transform.eulerAngles.y;
+            }
+            wasRagdolledLastFrame = true;
+            HandleRagdollCameraLook();
             return;
         }
 
+        wasRagdolledLastFrame = false;
         HandleLook();
 
         // Capture jump input in Update so key presses are never missed between physics ticks
@@ -143,6 +186,16 @@ public class PlayerController : NetworkBehaviour
         {
             jumpBufferTimer = 0.15f; // 150ms input buffer
         }
+    }
+
+    private void LateUpdate()
+    {
+        if (!IsOwner || playerCamera == null || cameraHolder == null)
+        {
+            return;
+        }
+
+        UpdateThirdPersonCamera();
     }
 
     private void FixedUpdate()
@@ -296,6 +349,7 @@ public class PlayerController : NetworkBehaviour
         }
 
         transform.Rotate(Vector3.up * mouseX);
+        ragdollYaw = transform.eulerAngles.y;
 
         if (IsSpawned)
         {
@@ -303,26 +357,124 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+    private void HandleRagdollCameraLook()
+    {
+        if (Mouse.current == null)
+        {
+            return;
+        }
+
+        Vector2 mouseDelta = Mouse.current.delta.ReadValue();
+        float mouseX = mouseDelta.x * lookSensitivity;
+        float mouseY = mouseDelta.y * lookSensitivity;
+
+        xRotation -= mouseY;
+        xRotation = Mathf.Clamp(xRotation, -maxLookAngle, maxLookAngle);
+        ragdollYaw += mouseX;
+    }
+
+    private void UpdateThirdPersonCamera()
+    {
+        currentDistance = Mathf.MoveTowards(currentDistance, targetDistance, zoomSpeed * Time.deltaTime);
+
+        Vector3 pivotPos;
+        Quaternion lookRotation;
+
+        if (IsRagdolled())
+        {
+            pivotPos = transform.position + Vector3.up * 0.75f;
+            lookRotation = Quaternion.Euler(xRotation, ragdollYaw, 0f);
+        }
+        else
+        {
+            pivotPos = cameraHolder.position;
+            lookRotation = cameraHolder.rotation;
+        }
+
+        Vector3 localOffset = new Vector3(shoulderOffset, cameraHeight, -currentDistance);
+        Vector3 desiredCameraPos = pivotPos + lookRotation * localOffset;
+
+        Vector3 toDesired = desiredCameraPos - pivotPos;
+        float desiredDistance = toDesired.magnitude;
+        Vector3 cameraDir = toDesired.normalized;
+
+        float finalDistance = desiredDistance;
+
+        RaycastHit[] hits = Physics.SphereCastAll(
+            pivotPos,
+            cameraCollisionRadius,
+            cameraDir,
+            desiredDistance,
+            cameraCollisionMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            RaycastHit hit = hits[i];
+            if (IsValidCameraObstacle(hit.collider) && hit.distance > 0.05f)
+            {
+                float adjustedDist = Mathf.Max(minCameraDistance, hit.distance - 0.1f);
+                if (adjustedDist < finalDistance)
+                {
+                    finalDistance = adjustedDist;
+                }
+            }
+        }
+
+        Vector3 finalCameraPos = pivotPos + cameraDir * finalDistance;
+        playerCamera.transform.position = finalCameraPos;
+        playerCamera.transform.rotation = lookRotation;
+    }
+
+    private bool IsValidCameraObstacle(Collider col)
+    {
+        if (col == null || col.isTrigger)
+        {
+            return false;
+        }
+
+        if (col.transform == transform || col.transform.IsChildOf(transform))
+        {
+            return false;
+        }
+
+        if (col.GetComponentInParent<GrabbableObject>() != null)
+        {
+            return false;
+        }
+
+        if (col.GetComponentInParent<EnemyHealth>() != null)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Resets orientation, physics constraints, and camera after recovering from ragdoll.
     /// </summary>
     public void ResetAfterRagdoll(float currentYaw)
     {
-        xRotation = 0f;
+        float finalYaw = wasRagdolledLastFrame ? ragdollYaw : currentYaw;
+        wasRagdolledLastFrame = false;
+
+        xRotation = Mathf.Clamp(xRotation, -maxLookAngle, maxLookAngle);
         jumpBufferTimer = 0f;
         jumpCooldownTimer = 0.2f;
 
         if (IsOwner && IsSpawned)
         {
-            CameraPitch.Value = 0f;
+            CameraPitch.Value = xRotation;
         }
 
         if (cameraHolder != null)
         {
-            cameraHolder.localRotation = Quaternion.identity;
+            cameraHolder.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
         }
 
-        transform.rotation = Quaternion.Euler(0f, currentYaw, 0f);
+        transform.rotation = Quaternion.Euler(0f, finalYaw, 0f);
 
         if (rb != null)
         {

@@ -435,12 +435,31 @@ public class GameHUD : MonoBehaviour
             if (rayTestDist > 0.2f)
             {
                 Vector3 rayOrigin = camPos + toEnemy.normalized * 0.3f;
-                if (Physics.Raycast(rayOrigin, toEnemy.normalized, out RaycastHit hit, rayTestDist, ~0, QueryTriggerInteraction.Ignore))
+                RaycastHit[] hits = Physics.RaycastAll(rayOrigin, toEnemy.normalized, rayTestDist, ~0, QueryTriggerInteraction.Ignore);
+                System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+                bool blocked = false;
+                PlayerController localPc = FindLocalPlayerController();
+                for (int h = 0; h < hits.Length; h++)
                 {
-                    if (hit.transform != enemy.transform && !hit.transform.IsChildOf(enemy.transform))
+                    RaycastHit hit = hits[h];
+                    if (hit.transform == enemy.transform || hit.transform.IsChildOf(enemy.transform))
+                    {
+                        break;
+                    }
+
+                    if (localPc != null && (hit.transform == localPc.transform || hit.transform.IsChildOf(localPc.transform)))
                     {
                         continue;
                     }
+
+                    blocked = true;
+                    break;
+                }
+
+                if (blocked)
+                {
+                    continue;
                 }
             }
 

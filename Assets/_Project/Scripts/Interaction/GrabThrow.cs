@@ -101,20 +101,45 @@ public class GrabThrow : NetworkBehaviour
         }
 
         Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
-        if (Physics.Raycast(ray, out RaycastHit hit, grabRange))
+        float maxRayDist = grabRange + 6f;
+
+        RaycastHit[] hits = Physics.RaycastAll(ray, maxRayDist, ~0, QueryTriggerInteraction.Ignore);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+        for (int i = 0; i < hits.Length; i++)
         {
+            RaycastHit hit = hits[i];
+            if (hit.collider == null || hit.transform.IsChildOf(transform))
+            {
+                continue;
+            }
+
             GrabbableObject grabbable = hit.collider.GetComponentInParent<GrabbableObject>();
             if (grabbable != null && !grabbable.IsGrabbed.Value)
             {
-                heldObject = grabbable;
-
-                // Disable collision with the player while held so it doesn't push the player
-                if (playerCollider != null && grabbable.Col != null)
+                float distToPlayer = Vector3.Distance(transform.position + Vector3.up * 1.2f, grabbable.transform.position);
+                if (distToPlayer <= grabRange + 0.8f)
                 {
-                    Physics.IgnoreCollision(playerCollider, grabbable.Col, true);
-                }
+                    heldObject = grabbable;
 
-                grabbable.GrabServerRpc(OwnerClientId);
+                    // Disable collision with the player while held so it doesn't push the player
+                    if (playerCollider != null && grabbable.Col != null)
+                    {
+                        Physics.IgnoreCollision(playerCollider, grabbable.Col, true);
+                    }
+
+                    grabbable.GrabServerRpc(OwnerClientId);
+                    return;
+                }
+            }
+            else
+            {
+                // If solid geometry without damageable or grabbable is hit, line of sight is obstructed
+                if (hit.collider.GetComponentInParent<IDamageable>() == null &&
+                    hit.collider.GetComponentInParent<GrabbableObject>() == null)
+                {
+                    break;
+                }
             }
         }
     }
@@ -129,9 +154,28 @@ public class GrabThrow : NetworkBehaviour
         GrabbableObject toThrow = heldObject;
         heldObject = null;
 
-        // Launch from slightly ahead of the camera so it doesn't clip
-        Vector3 throwOrigin = playerCamera.transform.position + playerCamera.transform.forward * 0.9f;
-        Vector3 throwVelocity = playerCamera.transform.forward * throwForce + Vector3.up * 1.5f;
+        Vector3 throwOrigin = transform.position + Vector3.up * 1.3f + transform.forward * 0.85f;
+
+        Ray aimRay = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
+        Vector3 aimTarget;
+        if (Physics.Raycast(aimRay, out RaycastHit aimHit, 60f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (!aimHit.transform.IsChildOf(transform))
+            {
+                aimTarget = aimHit.point;
+            }
+            else
+            {
+                aimTarget = aimRay.GetPoint(35f);
+            }
+        }
+        else
+        {
+            aimTarget = aimRay.GetPoint(35f);
+        }
+
+        Vector3 throwDir = (aimTarget - throwOrigin).normalized;
+        Vector3 throwVelocity = throwDir * throwForce + Vector3.up * 1.2f;
 
         toThrow.ReleaseServerRpc(throwOrigin, throwVelocity);
 
@@ -152,13 +196,8 @@ public class GrabThrow : NetworkBehaviour
         GrabbableObject toDrop = heldObject;
         heldObject = null;
 
-        Vector3 dropOrigin = playerCamera != null
-            ? playerCamera.transform.position + playerCamera.transform.forward * 0.8f
-            : transform.position + transform.forward * 0.8f;
-
-        Vector3 dropVelocity = playerCamera != null
-            ? playerCamera.transform.forward * 2f
-            : transform.forward * 2f;
+        Vector3 dropOrigin = transform.position + Vector3.up * 1.2f + transform.forward * 0.9f;
+        Vector3 dropVelocity = transform.forward * 2.5f;
 
         toDrop.ReleaseServerRpc(dropOrigin, dropVelocity);
 

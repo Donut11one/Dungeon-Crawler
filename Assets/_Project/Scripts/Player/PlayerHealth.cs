@@ -90,6 +90,15 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     }
 
     /// <summary>
+    /// Grants a temporary invulnerability grace period (e.g. after standing up from ragdoll)
+    /// to prevent perma-stun locking.
+    /// </summary>
+    public void GrantGetUpGracePeriod(float duration = 1.5f)
+    {
+        damageCooldownTimer = Mathf.Max(damageCooldownTimer, duration);
+    }
+
+    /// <summary>
     /// Server-side: Apply damage and knockback to this player.
     /// Uses damageCooldown to prevent rapid multi-hit spam.
     /// </summary>

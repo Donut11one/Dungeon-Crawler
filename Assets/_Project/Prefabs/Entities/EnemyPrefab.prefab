@@ -231,7 +231,7 @@ MonoBehaviour:
   chaseSpeed: 4.2
   wanderSpeed: 2.2
   attackRange: 2.2
-  attackCooldown: 3
+  attackCooldown: 10
   attackWindup: 0.35
   attackRecovery: 1.2
   attackDamage: 20

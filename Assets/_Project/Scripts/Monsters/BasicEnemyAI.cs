@@ -441,7 +441,9 @@ public class BasicEnemyAI : NetworkBehaviour
         RagdollController targetRagdoll = currentTarget.GetComponent<RagdollController>();
         if (targetRagdoll != null && targetRagdoll.IsRagdolled.Value)
         {
-            attackTimer = 1.5f; // Wait for player to stand up
+            // Maintain at least a 2.5s window after the player stands up before another attack can start,
+            // and never overwrite a longer attackCooldown.
+            attackTimer = Mathf.Max(attackTimer, 2.5f);
             return;
         }
 

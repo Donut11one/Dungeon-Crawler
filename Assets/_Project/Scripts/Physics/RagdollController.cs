@@ -190,11 +190,17 @@ public class RagdollController : NetworkBehaviour
             rb.constraints = normalConstraints;
         }
 
-        // 4. Reset player camera and mouse look
+        // 4. Reset player camera and mouse look, and grant get-up grace period
         PlayerController playerController = GetComponent<PlayerController>();
         if (playerController != null)
         {
             playerController.ResetAfterRagdoll(currentYaw);
+        }
+
+        PlayerHealth playerHealth = GetComponent<PlayerHealth>();
+        if (playerHealth != null)
+        {
+            playerHealth.GrantGetUpGracePeriod(1.5f);
         }
 
         // 5. Re-enable NavMeshAgent if present (enemies)

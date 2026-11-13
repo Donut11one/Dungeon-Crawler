@@ -175,7 +175,7 @@ public static class DemoSceneSetup
         // Camera
         GameObject cameraObj = new GameObject("PlayerCamera");
         cameraObj.transform.parent = cameraHolder.transform;
-        cameraObj.transform.localPosition = Vector3.zero;
+        cameraObj.transform.localPosition = new Vector3(0.35f, 0.35f, -2.8f);
         cameraObj.transform.localRotation = Quaternion.identity;
         Camera cam = cameraObj.AddComponent<Camera>();
         cam.nearClipPlane = 0.1f;
