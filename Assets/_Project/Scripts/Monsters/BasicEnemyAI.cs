@@ -1,16 +1,26 @@
+using System;
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
+using Random = UnityEngine.Random;
 
 /// <summary>
-/// Enemy AI with aggro range detection, chase, wander, and attack behaviors.
+/// Enemy AI with aggro range detection, combat state transitions, and distinct visual states.
 /// Server-authoritative: only the server runs AI decision logic.
-/// Syncs aggro state across the network for visual feedback (e.g. glowing red eyes).
-/// Pauses when ragdolled or dead.
+/// Synchronizes CombatState across the network to drive visual color changes
+/// (Idle, Chasing, Attacking, Cooldown), making future animation hooking seamless.
 /// </summary>
 public class BasicEnemyAI : NetworkBehaviour
 {
+    public enum CombatState
+    {
+        Idle = 0,
+        Chasing = 1,
+        Attacking = 2,
+        Cooldown = 3
+    }
+
     [Header("Behavior")]
     [SerializeField] private bool canMove = true;
     [SerializeField] private bool canAttack = true;
@@ -22,9 +32,11 @@ public class BasicEnemyAI : NetworkBehaviour
     [SerializeField] private float chaseSpeed = 4.2f;
     [SerializeField] private float wanderSpeed = 2.2f;
 
-    [Header("Attack")]
-    [SerializeField] private float attackRange = 2f;
-    [SerializeField] private float attackCooldown = 1.8f;
+    [Header("Attack & Cooldown")]
+    [SerializeField] private float attackRange = 2.2f;
+    [SerializeField] private float attackCooldown = 3.0f;
+    [SerializeField] private float attackWindup = 0.35f;
+    [SerializeField] private float attackRecovery = 1.2f;
     [SerializeField] private int attackDamage = 20;
     [SerializeField] private float attackKnockback = 8f;
 
@@ -32,33 +44,62 @@ public class BasicEnemyAI : NetworkBehaviour
     [SerializeField] private float wanderRadius = 7f;
     [SerializeField] private float wanderInterval = 3.5f;
 
+    [Header("State Visual Colors")]
+    [SerializeField] private Color idleBodyColor = new Color(0.55f, 0.15f, 0.15f);
+    [SerializeField] private Color idleEyeColor = Color.yellow;
+
+    [SerializeField] private Color chaseBodyColor = new Color(0.95f, 0.35f, 0.05f);
+    [SerializeField] private Color chaseEyeColor = new Color(1f, 0.05f, 0.05f);
+
+    [SerializeField] private Color attackBodyColor = new Color(1f, 0.1f, 0.45f);
+    [SerializeField] private Color attackEyeColor = new Color(1f, 1f, 0.3f);
+
+    [SerializeField] private Color cooldownBodyColor = new Color(0.2f, 0.5f, 0.85f);
+    [SerializeField] private Color cooldownEyeColor = new Color(0.2f, 0.85f, 1f);
+
+    public NetworkVariable<CombatState> CurrentCombatState = new NetworkVariable<CombatState>(
+        CombatState.Idle,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public NetworkVariable<bool> IsAggroed = new NetworkVariable<bool>(
         false,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
 
+    /// <summary>
+    /// Event fired whenever the combat state transitions.
+    /// Hook future Animator triggers or sound effects here.
+    /// </summary>
+    public event Action<CombatState> OnCombatStateChangedEvent;
+
     private NavMeshAgent agent;
     private RagdollController ragdollController;
     private EnemyHealth enemyHealth;
     private float attackTimer;
+    private float attackPauseTimer;
+    private float windupTimer;
+    private bool isAttacking;
     private float wanderTimer;
     private Transform currentTarget;
 
+    private Renderer bodyRenderer;
     private readonly List<Renderer> eyeRenderers = new();
-    private Color originalEyeColor = Color.yellow;
-    private readonly Color aggroEyeColor = new Color(1f, 0.1f, 0.1f);
+    private MaterialPropertyBlock propBlock;
 
     private void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
         ragdollController = GetComponent<RagdollController>();
         enemyHealth = GetComponent<EnemyHealth>();
+        propBlock = new MaterialPropertyBlock();
 
-        CacheEyeRenderers();
+        CacheRenderers();
     }
 
-    private void CacheEyeRenderers()
+    private void CacheRenderers()
     {
         eyeRenderers.Clear();
         Renderer[] allRenderers = GetComponentsInChildren<Renderer>();
@@ -67,41 +108,107 @@ public class BasicEnemyAI : NetworkBehaviour
             if (rend.gameObject.name.Contains("Eye"))
             {
                 eyeRenderers.Add(rend);
-                if (rend.material != null)
-                {
-                    originalEyeColor = rend.material.color;
-                }
             }
+            else if (rend.gameObject.name.Contains("Body"))
+            {
+                bodyRenderer = rend;
+            }
+        }
+
+        if (bodyRenderer == null)
+        {
+            bodyRenderer = GetComponent<Renderer>();
         }
     }
 
     public override void OnNetworkSpawn()
     {
-        IsAggroed.OnValueChanged += OnAggroStateChanged;
+        CurrentCombatState.OnValueChanged += OnCombatStateChanged;
 
         // Apply current visual state on spawn
-        UpdateEyeVisuals(IsAggroed.Value);
+        UpdateStateVisuals(CurrentCombatState.Value);
     }
 
     public override void OnNetworkDespawn()
     {
-        IsAggroed.OnValueChanged -= OnAggroStateChanged;
+        CurrentCombatState.OnValueChanged -= OnCombatStateChanged;
     }
 
-    private void OnAggroStateChanged(bool previous, bool current)
+    private void OnCombatStateChanged(CombatState previous, CombatState current)
     {
-        UpdateEyeVisuals(current);
+        UpdateStateVisuals(current);
+        OnCombatStateChangedEvent?.Invoke(current);
     }
 
-    private void UpdateEyeVisuals(bool aggroed)
+    private void SetCombatState(CombatState newState)
     {
-        Color targetColor = aggroed ? aggroEyeColor : originalEyeColor;
-        foreach (Renderer rend in eyeRenderers)
+        if (CurrentCombatState.Value != newState)
         {
-            if (rend != null && rend.material != null)
+            CurrentCombatState.Value = newState;
+            IsAggroed.Value = (newState != CombatState.Idle);
+        }
+    }
+
+    private void UpdateStateVisuals(CombatState state)
+    {
+        Color bodyColor;
+        Color eyeColor;
+
+        switch (state)
+        {
+            case CombatState.Attacking:
+                bodyColor = attackBodyColor;
+                eyeColor = attackEyeColor;
+                break;
+            case CombatState.Cooldown:
+                bodyColor = cooldownBodyColor;
+                eyeColor = cooldownEyeColor;
+                break;
+            case CombatState.Chasing:
+                bodyColor = chaseBodyColor;
+                eyeColor = chaseEyeColor;
+                break;
+            case CombatState.Idle:
+            default:
+                bodyColor = idleBodyColor;
+                eyeColor = idleEyeColor;
+                break;
+        }
+
+        if (bodyRenderer != null)
+        {
+            ApplyColor(bodyRenderer, bodyColor);
+        }
+
+        foreach (Renderer eyeRend in eyeRenderers)
+        {
+            if (eyeRend != null)
             {
-                rend.material.color = targetColor;
+                ApplyColor(eyeRend, eyeColor);
             }
+        }
+    }
+
+    private void ApplyColor(Renderer rend, Color color)
+    {
+        if (rend == null)
+        {
+            return;
+        }
+
+        if (propBlock == null)
+        {
+            propBlock = new MaterialPropertyBlock();
+        }
+
+        rend.GetPropertyBlock(propBlock);
+        propBlock.SetColor("_BaseColor", color);
+        propBlock.SetColor("_Color", color);
+        rend.SetPropertyBlock(propBlock);
+
+        if (rend.material != null)
+        {
+            rend.material.color = color;
         }
     }
 
@@ -115,13 +222,11 @@ public class BasicEnemyAI : NetworkBehaviour
         // Don't act while dead
         if (enemyHealth != null && enemyHealth.IsDead.Value)
         {
+            CancelAttack();
+            SetCombatState(CombatState.Idle);
             if (agent != null && agent.enabled)
             {
                 agent.enabled = false;
-            }
-            if (IsAggroed.Value)
-            {
-                IsAggroed.Value = false;
             }
             return;
         }
@@ -129,6 +234,7 @@ public class BasicEnemyAI : NetworkBehaviour
         // Don't act while ragdolled
         if (ragdollController != null && ragdollController.IsRagdolled.Value)
         {
+            CancelAttack();
             return;
         }
 
@@ -137,23 +243,59 @@ public class BasicEnemyAI : NetworkBehaviour
             return;
         }
 
-        attackTimer -= Time.deltaTime;
+        // Decrement attack cooldown timer
+        if (attackTimer > 0f)
+        {
+            attackTimer -= Time.deltaTime;
+        }
+
+        // If in post-attack recovery pause: remain stationary until recovery expires
+        if (attackPauseTimer > 0f)
+        {
+            SetCombatState(CombatState.Cooldown);
+            attackPauseTimer -= Time.deltaTime;
+
+            if (agent != null && agent.enabled && agent.isOnNavMesh)
+            {
+                agent.isStopped = true;
+                agent.velocity = Vector3.zero;
+            }
+
+            if (attackPauseTimer <= 0f && agent != null && agent.enabled && agent.isOnNavMesh)
+            {
+                agent.isStopped = false;
+            }
+            return;
+        }
+
+        // If in attack wind-up: telegraph strike and face target
+        if (isAttacking)
+        {
+            SetCombatState(CombatState.Attacking);
+            HandleAttackWindup();
+            return;
+        }
 
         // Re-evaluate target
         EvaluateTarget();
 
         if (currentTarget != null)
         {
-            Chase();
-
             float dist = Vector3.Distance(transform.position, currentTarget.position);
+
             if (dist <= attackRange && attackTimer <= 0f)
             {
-                Attack();
+                StartAttack();
+            }
+            else
+            {
+                SetCombatState(CombatState.Chasing);
+                Chase();
             }
         }
         else
         {
+            SetCombatState(CombatState.Idle);
             Wander();
         }
     }
@@ -166,18 +308,14 @@ public class BasicEnemyAI : NetworkBehaviour
             PlayerHealth targetHealth = currentTarget.GetComponent<PlayerHealth>();
             if (targetHealth == null || targetHealth.IsDead.Value)
             {
-                // Target died or disappeared
                 currentTarget = null;
-                IsAggroed.Value = false;
             }
             else
             {
                 float distToTarget = Vector3.Distance(transform.position, currentTarget.position);
                 if (distToTarget > loseTargetRange)
                 {
-                    // Target escaped beyond aggro leash
                     currentTarget = null;
-                    IsAggroed.Value = false;
                 }
             }
         }
@@ -189,14 +327,6 @@ public class BasicEnemyAI : NetworkBehaviour
             if (closestPlayer != null)
             {
                 currentTarget = closestPlayer;
-                IsAggroed.Value = true;
-            }
-            else
-            {
-                if (IsAggroed.Value)
-                {
-                    IsAggroed.Value = false;
-                }
             }
         }
     }
@@ -229,7 +359,6 @@ public class BasicEnemyAI : NetworkBehaviour
             Transform playerT = client.PlayerObject.transform;
             float dist = Vector3.Distance(transform.position, playerT.position);
 
-            // Outside aggro range
             if (dist > aggroRange)
             {
                 continue;
@@ -249,7 +378,6 @@ public class BasicEnemyAI : NetworkBehaviour
                 }
                 else
                 {
-                    // If raycast hit something, verify if it was the player or a child collider
                     if (Physics.Raycast(eyePos, toPlayer.normalized, out RaycastHit hit, dist, ~0, QueryTriggerInteraction.Ignore))
                     {
                         if (hit.collider != null && hit.collider.transform.IsChildOf(playerT))
@@ -284,7 +412,7 @@ public class BasicEnemyAI : NetworkBehaviour
         if (closest != null)
         {
             currentTarget = closest;
-            IsAggroed.Value = true;
+            SetCombatState(CombatState.Chasing);
         }
     }
 
@@ -302,26 +430,101 @@ public class BasicEnemyAI : NetworkBehaviour
         }
     }
 
-    private void Attack()
+    private void StartAttack()
     {
-        if (!canAttack)
+        if (!canAttack || currentTarget == null)
         {
             return;
         }
 
+        // Do not attack a player who is already knocked down in ragdoll
+        RagdollController targetRagdoll = currentTarget.GetComponent<RagdollController>();
+        if (targetRagdoll != null && targetRagdoll.IsRagdolled.Value)
+        {
+            attackTimer = 1.5f; // Wait for player to stand up
+            return;
+        }
+
+        isAttacking = true;
+        windupTimer = attackWindup;
+        SetCombatState(CombatState.Attacking);
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.isStopped = true;
+            agent.velocity = Vector3.zero;
+        }
+    }
+
+    private void HandleAttackWindup()
+    {
+        if (currentTarget == null)
+        {
+            CancelAttack();
+            return;
+        }
+
+        // Rotate smoothly towards target during windup
+        Vector3 lookDir = currentTarget.position - transform.position;
+        lookDir.y = 0f;
+        if (lookDir.sqrMagnitude > 0.001f)
+        {
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), Time.deltaTime * 10f);
+        }
+
+        windupTimer -= Time.deltaTime;
+        if (windupTimer <= 0f)
+        {
+            ExecuteAttackStrike();
+        }
+    }
+
+    private void ExecuteAttackStrike()
+    {
+        isAttacking = false;
         attackTimer = attackCooldown;
+        attackPauseTimer = attackRecovery;
+        SetCombatState(CombatState.Cooldown);
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.isStopped = true;
+            agent.velocity = Vector3.zero;
+        }
 
         if (currentTarget == null)
         {
             return;
         }
 
-        IDamageable damageable = currentTarget.GetComponent<IDamageable>();
-        if (damageable != null)
+        // Verify target is still within strike range and not downed
+        float dist = Vector3.Distance(transform.position, currentTarget.position);
+        if (dist <= attackRange + 0.8f)
         {
-            Vector3 hitDir = (currentTarget.position - transform.position).normalized;
-            hitDir.y = 0.35f; // Upward knockback pop
-            damageable.TakeDamage(attackDamage, hitDir * attackKnockback);
+            RagdollController targetRagdoll = currentTarget.GetComponent<RagdollController>();
+            if (targetRagdoll != null && targetRagdoll.IsRagdolled.Value)
+            {
+                return;
+            }
+
+            IDamageable damageable = currentTarget.GetComponent<IDamageable>();
+            if (damageable != null)
+            {
+                Vector3 hitDir = (currentTarget.position - transform.position).normalized;
+                hitDir.y = 0.35f; // Upward knockback pop
+                damageable.TakeDamage(attackDamage, hitDir * attackKnockback);
+            }
+        }
+    }
+
+    private void CancelAttack()
+    {
+        isAttacking = false;
+        windupTimer = 0f;
+        attackPauseTimer = 0f;
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.isStopped = false;
         }
     }
 

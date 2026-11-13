@@ -230,12 +230,19 @@ MonoBehaviour:
   directProximityRange: 4.5
   chaseSpeed: 4.2
   wanderSpeed: 2.2
-  attackRange: 2
-  attackCooldown: 1.8
+  attackRange: 2.2
+  attackCooldown: 3
+  attackWindup: 0.35
+  attackRecovery: 1.2
   attackDamage: 20
   attackKnockback: 8
   wanderRadius: 7
   wanderInterval: 3.5
+  CurrentCombatState:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
   IsAggroed:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0
@@ -257,6 +264,7 @@ MonoBehaviour:
   maxHealth: 50
   knockbackMultiplier: 3
   deathDespawnDelay: 4
+  damageCooldown: 0.5
   dropPrefabs:
   - {fileID: 4810294819203810291, guid: 68ec2c99149d4a4e908ac6ea3bcbe7e8, type: 3}
   minDropCount: 2

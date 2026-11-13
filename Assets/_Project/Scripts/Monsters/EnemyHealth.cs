@@ -14,6 +14,9 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
     [SerializeField] private float knockbackMultiplier = 3f;
     [SerializeField] private float deathDespawnDelay = 4f;
 
+    [Header("Damage Settings")]
+    [SerializeField] private float damageCooldown = 0.5f;
+
     [Header("Loot Drops")]
     [SerializeField] private GameObject[] dropPrefabs;
     [SerializeField] private int minDropCount = 2;
@@ -35,6 +38,7 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
     private RagdollController ragdollController;
     private BasicEnemyAI enemyAI;
     private float despawnTimer;
+    private float damageCooldownTimer;
 
     private void Awake()
     {
@@ -57,6 +61,11 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
             return;
         }
 
+        if (damageCooldownTimer > 0f)
+        {
+            damageCooldownTimer -= Time.deltaTime;
+        }
+
         if (IsDead.Value)
         {
             despawnTimer -= Time.deltaTime;
@@ -73,6 +82,7 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
     /// <summary>
     /// Server-side: Apply damage and knockback to this enemy.
     /// Alerts enemy AI to the attacker.
+    /// Uses damageCooldown to prevent multiple hits in a single physics tick.
     /// </summary>
     public void TakeDamage(int damage, Vector3 hitDirection)
     {
@@ -84,7 +94,12 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
         {
             return;
         }
+        if (damageCooldownTimer > 0f)
+        {
+            return;
+        }
 
+        damageCooldownTimer = damageCooldown;
         CurrentHealth.Value -= damage;
 
         // Alert enemy AI to attacker
