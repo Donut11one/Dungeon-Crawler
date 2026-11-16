@@ -62,6 +62,9 @@ public class PlayerController : NetworkBehaviour
     private Camera playerCamera;
     private AudioListener audioListener;
     private float xRotation;
+    private float currentYaw;
+    private Vector2Int lastScreenSize;
+    private int skipLookFrames;
 
     private float jumpBufferTimer;
     private float jumpCooldownTimer;
@@ -75,6 +78,8 @@ public class PlayerController : NetworkBehaviour
         playerCamera = GetComponentInChildren<Camera>();
         audioListener = GetComponentInChildren<AudioListener>();
         playerAttack = GetComponent<PlayerAttack>();
+        currentYaw = transform.eulerAngles.y;
+        lastScreenSize = new Vector2Int(Screen.width, Screen.height);
     }
 
     public override void OnNetworkSpawn()
@@ -106,6 +111,10 @@ public class PlayerController : NetworkBehaviour
             }
             return;
         }
+
+        currentYaw = transform.eulerAngles.y;
+        lastScreenSize = new Vector2Int(Screen.width, Screen.height);
+        skipLookFrames = 3;
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -175,6 +184,32 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Explicitly synchronize yaw state with the current transform rotation.
+    /// Used after teleports, resets, or recovering from ragdoll.
+    /// </summary>
+    public void SyncYawFromTransform()
+    {
+        currentYaw = transform.eulerAngles.y;
+        if (rb != null)
+        {
+            rb.rotation = Quaternion.Euler(0f, currentYaw, 0f);
+        }
+    }
+
+    private bool CanLockCursor()
+    {
+        if (ArmoryShopUI.Instance != null && ArmoryShopUI.Instance.IsOpen)
+        {
+            return false;
+        }
+        if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value == GameManager.GameState.RoundOver)
+        {
+            return false;
+        }
+        return true;
+    }
+
     private void Update()
     {
         if (!IsOwner)
@@ -184,6 +219,14 @@ public class PlayerController : NetworkBehaviour
         if (IsRagdolled())
         {
             return;
+        }
+
+        // Detect resolution or display size changes
+        Vector2Int currentScreenSize = new Vector2Int(Screen.width, Screen.height);
+        if (currentScreenSize != lastScreenSize)
+        {
+            lastScreenSize = currentScreenSize;
+            skipLookFrames = 2; // Discard cursor warping delta from resolution switch
         }
 
         HandleLook();
@@ -370,11 +413,22 @@ public class PlayerController : NetworkBehaviour
             return;
         }
 
+        if (skipLookFrames > 0)
+        {
+            skipLookFrames--;
+            return;
+        }
+
         Vector2 mouseDelta = Mouse.current.delta.ReadValue();
 
-        float mouseX = mouseDelta.x * lookSensitivity;
-        float mouseY = mouseDelta.y * lookSensitivity;
+        // Clamp mouse delta to suppress anomalous single-frame hardware spikes or cursor warping
+        float clampedDeltaX = Mathf.Clamp(mouseDelta.x, -80f, 80f);
+        float clampedDeltaY = Mathf.Clamp(mouseDelta.y, -80f, 80f);
 
+        float mouseX = clampedDeltaX * lookSensitivity;
+        float mouseY = clampedDeltaY * lookSensitivity;
+
+        // Up / Down (Pitch)
         xRotation -= mouseY;
         xRotation = Mathf.Clamp(xRotation, -maxLookAngle, maxLookAngle);
 
@@ -383,7 +437,19 @@ public class PlayerController : NetworkBehaviour
             cameraHolder.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
         }
 
-        transform.Rotate(Vector3.up * mouseX);
+        // Left / Right (Yaw)
+        currentYaw += mouseX;
+        currentYaw = Mathf.Repeat(currentYaw, 360f);
+
+        Quaternion targetRotation = Quaternion.Euler(0f, currentYaw, 0f);
+        transform.rotation = targetRotation;
+
+        // Keep Rigidbody rotation strictly synchronized with transform.rotation
+        // so PhysX interpolation never pulls or snaps the transform back to a stale rotation!
+        if (rb != null)
+        {
+            rb.rotation = targetRotation;
+        }
 
         if (IsSpawned)
         {
@@ -394,9 +460,10 @@ public class PlayerController : NetworkBehaviour
     /// <summary>
     /// Resets orientation, physics constraints, and camera after recovering from ragdoll.
     /// </summary>
-    public void ResetAfterRagdoll(float currentYaw)
+    public void ResetAfterRagdoll(float newYaw)
     {
         xRotation = 0f;
+        currentYaw = newYaw;
         jumpBufferTimer = 0f;
         jumpCooldownTimer = 0.2f;
 
@@ -410,11 +477,13 @@ public class PlayerController : NetworkBehaviour
             cameraHolder.localRotation = Quaternion.identity;
         }
 
-        transform.rotation = Quaternion.Euler(0f, currentYaw, 0f);
+        Quaternion uprightRotation = Quaternion.Euler(0f, currentYaw, 0f);
+        transform.rotation = uprightRotation;
 
         if (rb != null)
         {
             rb.freezeRotation = true;
+            rb.rotation = uprightRotation;
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             rb.linearDamping = 0f;

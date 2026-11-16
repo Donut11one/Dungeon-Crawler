@@ -36,12 +36,16 @@ public class GameManager : NetworkBehaviour
 
     // Tracks which clientIds have successfully extracted this round (server-side only)
     private readonly HashSet<ulong> extractedPlayers = new();
+    private int lastScreenWidth;
+    private int lastScreenHeight;
 
     private void Awake()
     {
         // Enforce frame rate cap and VSync to prevent standalone builds from running at 2,000+ FPS and pegging GPU/CPU at 100%
         QualitySettings.vSyncCount = 1;
         Application.targetFrameRate = 60;
+        lastScreenWidth = Screen.width;
+        lastScreenHeight = Screen.height;
 
         if (Instance != null && Instance != this)
         {
@@ -77,6 +81,22 @@ public class GameManager : NetworkBehaviour
 
     private void Update()
     {
+        // Re-enforce frame rate cap and VSync if the resolution or window size changes
+        if (Screen.width != lastScreenWidth || Screen.height != lastScreenHeight)
+        {
+            lastScreenWidth = Screen.width;
+            lastScreenHeight = Screen.height;
+
+            if (QualitySettings.vSyncCount == 0)
+            {
+                QualitySettings.vSyncCount = 1;
+            }
+            if (Application.targetFrameRate != 60)
+            {
+                Application.targetFrameRate = 60;
+            }
+        }
+
         if (!IsServer)
         {
             return;
