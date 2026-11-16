@@ -158,10 +158,14 @@ public static class ItemRegistry
             "Heavy salvaged plumbing pipe. Sturdy enough to crack monster skulls.",
             ItemType.Weapon,
             35,
-            0.55f,
+            1.40f,
             2.6f,
-            9f,
-            new Color(0.7f, 0.72f, 0.78f)
+            9.0f,
+            new Color(0.70f, 0.72f, 0.78f),
+            1,
+            30,
+            0.30f,
+            0.65f
         ));
 
         Register(ItemData.CreateRuntime(
@@ -170,10 +174,62 @@ public static class ItemRegistry
             "Classic utility prybar. Fast swings with moderate knockback.",
             ItemType.Weapon,
             28,
-            0.45f,
+            1.10f,
             2.4f,
             7.5f,
-            new Color(0.85f, 0.35f, 0.3f)
+            new Color(0.85f, 0.35f, 0.30f),
+            1,
+            45,
+            0.22f,
+            0.50f
+        ));
+
+        Register(ItemData.CreateRuntime(
+            "wrench",
+            "Heavy Wrench",
+            "Industrial pipe wrench. Slow swing but deals crushing blunt damage.",
+            ItemType.Weapon,
+            45,
+            1.75f,
+            2.3f,
+            12.0f,
+            new Color(0.90f, 0.60f, 0.20f),
+            1,
+            60,
+            0.40f,
+            0.85f
+        ));
+
+        Register(ItemData.CreateRuntime(
+            "stun_baton",
+            "Stun Baton",
+            "Security guard riot baton. Delivers immense concussive knockback.",
+            ItemType.Weapon,
+            22,
+            1.30f,
+            2.5f,
+            14.0f,
+            new Color(0.20f, 0.75f, 0.90f),
+            1,
+            75,
+            0.25f,
+            0.60f
+        ));
+
+        Register(ItemData.CreateRuntime(
+            "flashlight",
+            "Flashlight",
+            "Heavy-duty tactical torch. Illuminates subterranean darkness.",
+            ItemType.Tool,
+            5,
+            0.95f,
+            2.0f,
+            3.0f,
+            new Color(0.95f, 0.90f, 0.25f),
+            1,
+            15,
+            0.18f,
+            0.45f
         ));
 
         Register(ItemData.CreateRuntime(
@@ -182,11 +238,30 @@ public static class ItemRegistry
             "Emergency medical kit. Restores contractor health.",
             ItemType.Consumable,
             0,
-            1.0f,
+            1.20f,
             1.5f,
-            0f,
+            0.0f,
             new Color(0.25f, 0.85f, 0.35f),
-            5
+            5,
+            25,
+            0.30f,
+            0.60f
+        ));
+
+        Register(ItemData.CreateRuntime(
+            "abnormality_core",
+            "Monster Core",
+            "Glowing bio-mechanical core salvaged from an abnormality. Highly valuable.",
+            ItemType.Scrap,
+            10,
+            1.00f,
+            2.0f,
+            4.0f,
+            new Color(0.90f, 0.20f, 0.85f),
+            10,
+            100,
+            0.20f,
+            0.50f
         ));
     }
 

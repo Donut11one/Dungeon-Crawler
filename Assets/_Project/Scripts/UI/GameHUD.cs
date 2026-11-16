@@ -32,6 +32,9 @@ public class GameHUD : MonoBehaviour
 
     // Tracks which players escaped and their banked money (populated via RPC from GameManager)
     private readonly Dictionary<ulong, ExtractedRecord> extractedThisRound = new();
+    private float fpsTimer = 0f;
+    private int fpsFrameCount = 0;
+    private int currentFps = 60;
 
     private void InitStyles()
     {
@@ -275,7 +278,38 @@ public class GameHUD : MonoBehaviour
                 localPc.SetReadyServerRpc(!isLocalReady);
             }
 
+            // If Host, also offer a direct one-click "START EXPEDITION NOW" button
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+            {
+                GUI.backgroundColor = new Color(0.15f, 0.85f, 1f);
+                if (GUI.Button(new Rect(Screen.width / 2f - 180f, 160f, 360f, 32f), "START EXPEDITION NOW (HOST)"))
+                {
+                    if (GameManager.Instance != null)
+                    {
+                        GameManager.Instance.StartRound();
+                    }
+                }
+            }
+
             GUI.backgroundColor = originalBg;
+        }
+
+        // Display shareable Relay Join Code in top-right corner while in the staging bunker
+        if (RelayManager.IsRelayActive && !string.IsNullOrEmpty(RelayManager.CurrentJoinCode))
+        {
+            GUIStyle codeStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 13,
+                alignment = TextAnchor.MiddleRight,
+                fontStyle = FontStyle.Bold
+            };
+            codeStyle.normal.textColor = new Color(0.2f, 0.85f, 1f);
+            GUI.Label(new Rect(Screen.width - 260f, 15f, 240f, 22f), $"RELAY CODE: {RelayManager.CurrentJoinCode}", codeStyle);
+
+            if (GUI.Button(new Rect(Screen.width - 150f, 38f, 130f, 22f), "COPY JOIN CODE"))
+            {
+                GUIUtility.systemCopyBuffer = RelayManager.CurrentJoinCode;
+            }
         }
     }
 
@@ -782,13 +816,23 @@ public class GameHUD : MonoBehaviour
 
         string role = NetworkManager.Singleton.IsHost ? "Host" : "Client";
         int playerCount = NetworkManager.Singleton.ConnectedClientsList.Count;
+        string relayTag = RelayManager.IsRelayActive ? $" | Code: {RelayManager.CurrentJoinCode}" : "";
 
-        Rect rect = new Rect(Screen.width - 250f, Screen.height - 35f, 240f, 25f);
-        GUI.Label(rect, $"{role} | Players: {playerCount}", infoStyle);
+        Rect rect = new Rect(Screen.width - 340f, Screen.height - 35f, 330f, 25f);
+        GUI.Label(rect, $"{currentFps} FPS | {role} | Players: {playerCount}{relayTag}", infoStyle);
     }
 
     private void Update()
     {
+        fpsFrameCount++;
+        fpsTimer += Time.unscaledDeltaTime;
+        if (fpsTimer >= 0.5f)
+        {
+            currentFps = Mathf.RoundToInt(fpsFrameCount / fpsTimer);
+            fpsFrameCount = 0;
+            fpsTimer = 0f;
+        }
+
         if (GameManager.Instance == null)
         {
             return;

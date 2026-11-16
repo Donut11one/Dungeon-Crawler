@@ -280,9 +280,7 @@ public class LobbyArea : NetworkBehaviour
         Renderer rend = elevatorPad.GetComponent<Renderer>();
         if (rend != null)
         {
-            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.color = elevatorColor;
-            rend.material = mat;
+            rend.material = MaterialHelper.CreateLitMaterial(rend, elevatorColor);
         }
 
         // Replace default capsule collider with a tall trigger volume
@@ -443,9 +441,7 @@ public class LobbyArea : NetworkBehaviour
         Renderer rend = obj.GetComponent<Renderer>();
         if (rend != null)
         {
-            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.color = color;
-            rend.material = mat;
+            rend.material = MaterialHelper.CreateLitMaterial(rend, color);
         }
 
         return obj;

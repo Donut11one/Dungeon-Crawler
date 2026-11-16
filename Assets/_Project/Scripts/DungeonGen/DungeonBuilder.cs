@@ -376,9 +376,7 @@ public class DungeonBuilder : NetworkBehaviour
         Renderer rend = obj.GetComponent<Renderer>();
         if (rend != null)
         {
-            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.color    = color;
-            rend.material = mat;
+            rend.material = MaterialHelper.CreateLitMaterial(rend, color);
         }
     }
 
@@ -467,9 +465,7 @@ public class DungeonBuilder : NetworkBehaviour
         Renderer rend = extractionPointObj.GetComponent<Renderer>();
         if (rend != null)
         {
-            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.color    = new Color(0.1f, 1f, 0.2f);
-            rend.material = mat;
+            rend.material = MaterialHelper.CreateLitMaterial(rend, new Color(0.1f, 1f, 0.2f));
         }
 
         Destroy(extractionPointObj.GetComponent<CapsuleCollider>());

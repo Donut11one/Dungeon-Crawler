@@ -47,6 +47,9 @@
     "com.unity.modules.vehicles": "1.0.0",
     "com.unity.modules.video": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
-    "com.unity.modules.xr": "1.0.0"
+    "com.unity.modules.xr": "1.0.0",
+    "com.unity.services.core": "1.14.0",
+    "com.unity.services.authentication": "3.8.1",
+    "com.unity.services.relay": "1.2.0"
   }
 }

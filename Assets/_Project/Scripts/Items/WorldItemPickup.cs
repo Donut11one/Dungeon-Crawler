@@ -83,9 +83,7 @@ public class WorldItemPickup : NetworkBehaviour
         Renderer rend = visualMesh.GetComponent<Renderer>();
         if (rend != null)
         {
-            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.color = displayColor;
-            rend.material = mat;
+            rend.material = MaterialHelper.CreateLitMaterial(rend, displayColor);
         }
     }
 

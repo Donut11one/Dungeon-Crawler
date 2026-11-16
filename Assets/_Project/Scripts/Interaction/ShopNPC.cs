@@ -165,13 +165,16 @@ public class ShopNPC : MonoBehaviour
 
     private Camera GetActiveCamera()
     {
-        PlayerController pc = FindAnyObjectByType<PlayerController>();
-        if (pc != null && pc.IsOwner)
+        PlayerController[] pcs = FindObjectsByType<PlayerController>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < pcs.Length; i++)
         {
-            Camera playerCam = pc.GetComponentInChildren<Camera>();
-            if (playerCam != null && playerCam.isActiveAndEnabled)
+            if (pcs[i] != null && pcs[i].IsOwner)
             {
-                return playerCam;
+                Camera playerCam = pcs[i].GetComponentInChildren<Camera>();
+                if (playerCam != null && playerCam.isActiveAndEnabled)
+                {
+                    return playerCam;
+                }
             }
         }
 
@@ -195,10 +198,13 @@ public class ShopNPC : MonoBehaviour
             }
         }
 
-        PlayerController pc = FindAnyObjectByType<PlayerController>();
-        if (pc != null && pc.IsOwner)
+        PlayerController[] pcs = FindObjectsByType<PlayerController>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < pcs.Length; i++)
         {
-            return pc.transform;
+            if (pcs[i] != null && pcs[i].IsOwner)
+            {
+                return pcs[i].transform;
+            }
         }
 
         return null;

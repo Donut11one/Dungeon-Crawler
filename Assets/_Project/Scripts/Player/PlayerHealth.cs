@@ -58,6 +58,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
                 int index = (int)OwnerClientId;
                 spawnPosition = LobbyArea.Instance.GetLobbySpawnPoint(index);
                 transform.position = spawnPosition;
+                Physics.SyncTransforms();
                 ResetPlayerClientRpc(spawnPosition);
             }
             else
@@ -212,13 +213,23 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             rb.freezeRotation = true;
         }
 
+        Physics.SyncTransforms();
+
         ResetPlayerClientRpc(newSpawnPosition);
     }
 
     [Rpc(SendTo.ClientsAndHost)]
     private void ResetPlayerClientRpc(Vector3 newPosition)
     {
-        transform.position = newPosition;
+        OwnerNetworkTransform ont = GetComponent<OwnerNetworkTransform>();
+        if (ont != null && IsOwner)
+        {
+            ont.Teleport(newPosition, transform.rotation, transform.localScale);
+        }
+        else
+        {
+            transform.position = newPosition;
+        }
 
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb != null)
@@ -228,6 +239,8 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             rb.angularVelocity = Vector3.zero;
             rb.freezeRotation = true;
         }
+
+        Physics.SyncTransforms();
 
         GrabThrow grabThrow = GetComponent<GrabThrow>();
         if (grabThrow != null)

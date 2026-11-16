@@ -40,9 +40,7 @@ public class Coin : NetworkBehaviour
         Renderer rend = GetComponent<Renderer>();
         if (rend != null)
         {
-            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.color = new Color(1f, 0.82f, 0.1f);
-            rend.material = mat;
+            rend.material = MaterialHelper.CreateLitMaterial(rend, new Color(1f, 0.82f, 0.1f));
         }
     }
 

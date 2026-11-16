@@ -39,6 +39,10 @@ public class GameManager : NetworkBehaviour
 
     private void Awake()
     {
+        // Enforce frame rate cap and VSync to prevent standalone builds from running at 2,000+ FPS and pegging GPU/CPU at 100%
+        QualitySettings.vSyncCount = 1;
+        Application.targetFrameRate = 60;
+
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -49,6 +53,25 @@ public class GameManager : NetworkBehaviour
         if (GetComponent<LobbyArea>() == null && FindAnyObjectByType<LobbyArea>() == null)
         {
             gameObject.AddComponent<LobbyArea>();
+        }
+    }
+
+    private void OnApplicationQuit()
+    {
+        ShutdownNetwork();
+    }
+
+    public override void OnDestroy()
+    {
+        ShutdownNetwork();
+        base.OnDestroy();
+    }
+
+    private void ShutdownNetwork()
+    {
+        if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsListening || NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient))
+        {
+            NetworkManager.Singleton.Shutdown();
         }
     }
 

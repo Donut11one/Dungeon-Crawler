@@ -347,33 +347,47 @@ public class ArmoryShopUI : MonoBehaviour
 
     private PlayerWallet FindLocalPlayerWallet()
     {
-        if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null)
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null)
         {
-            return null;
+            NetworkObject playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
+            if (playerObj != null)
+            {
+                return playerObj.GetComponent<PlayerWallet>();
+            }
         }
 
-        NetworkObject playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
-        if (playerObj == null)
+        PlayerController[] pcs = FindObjectsByType<PlayerController>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < pcs.Length; i++)
         {
-            return null;
+            if (pcs[i] != null && pcs[i].IsOwner)
+            {
+                return pcs[i].GetComponent<PlayerWallet>();
+            }
         }
 
-        return playerObj.GetComponent<PlayerWallet>();
+        return null;
     }
 
     private PlayerInventory FindLocalPlayerInventory()
     {
-        if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null)
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null)
         {
-            return null;
+            NetworkObject playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
+            if (playerObj != null)
+            {
+                return playerObj.GetComponent<PlayerInventory>();
+            }
         }
 
-        NetworkObject playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
-        if (playerObj == null)
+        PlayerController[] pcs = FindObjectsByType<PlayerController>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < pcs.Length; i++)
         {
-            return null;
+            if (pcs[i] != null && pcs[i].IsOwner)
+            {
+                return pcs[i].GetComponent<PlayerInventory>();
+            }
         }
 
-        return playerObj.GetComponent<PlayerInventory>();
+        return null;
     }
 }
