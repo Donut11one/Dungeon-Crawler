@@ -1,9 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// Helper to safely create lit materials at runtime across both Editor and Standalone player builds.
+/// Helper to safely create and apply lit materials across both Editor and Standalone player builds.
 /// In Standalone builds, Shader.Find("Universal Render Pipeline/Lit") returns null if stripped.
 /// This helper safely extracts the active pipeline shader from the primitive renderer or falls back safely.
+/// In Editor mode, uses sharedMaterial to avoid material leaks.
 /// </summary>
 public static class MaterialHelper
 {
@@ -34,5 +35,28 @@ public static class MaterialHelper
         }
 
         return mat;
+    }
+
+    /// <summary>
+    /// Safely applies a lit colored material to a renderer.
+    /// Uses sharedMaterial during edit mode to prevent scene material leakage.
+    /// Uses material during play mode for instance-safe rendering.
+    /// </summary>
+    public static void ApplyMaterial(Renderer rend, Color color)
+    {
+        if (rend == null)
+        {
+            return;
+        }
+
+        Material mat = CreateLitMaterial(rend, color);
+        if (Application.isPlaying)
+        {
+            rend.material = mat;
+        }
+        else
+        {
+            rend.sharedMaterial = mat;
+        }
     }
 }

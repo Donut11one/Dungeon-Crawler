@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 072a6e31ed2d9294a90aa8625f1765ef, type: 3}
+  m_Name: CustomDungeonLayout
+  m_EditorClassIdentifier: Assembly-CSharp::DungeonLayoutData
+  layoutName: CustomDungeonLayout
+  defaultWallHeight: 4
+  defaultWallThickness: 0.3
+  defaultDoorWidth: 3.2
+  rooms:
+  - roomId: Room_10x10_704
+    roomLabel: Room_10x10_704
+    position: {x: -0.07399998, y: 0.00000023841858, z: 0}
+    dimensions: {x: 10, y: 4, z: 10}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways: []
+    levers: []
+    doors: []
+    coinSpawns: []
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: Room_10x10_445
+    roomLabel: Room_10x10_445
+    position: {x: 20.23, y: 0.00000059604645, z: -0.06}
+    dimensions: {x: 10, y: 4, z: 10}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways: []
+    levers: []
+    doors: []
+    coinSpawns: []
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: Room_1
+    roomLabel: Room_1
+    position: {x: 10.08, y: 0, z: 0}
+    dimensions: {x: 10, y: 4, z: 10}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways: []
+    levers: []
+    doors: []
+    coinSpawns: []
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}

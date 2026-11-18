@@ -22,7 +22,15 @@ public static class RelayManager
     public static bool HasError { get; private set; } = false;
     public static bool UseDtlsEncryption { get; set; } = false;
 
-    private static bool isInitialized = false;
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticState()
+    {
+        IsRelayActive = false;
+        IsConnecting = false;
+        StatusMessage = string.Empty;
+        HasError = false;
+        CurrentJoinCode = string.Empty;
+    }
 
     /// <summary>
     /// Selects the appropriate Relay endpoint from the allocation.
@@ -60,36 +68,50 @@ public static class RelayManager
     /// </summary>
     public static async Task<bool> InitializeServicesAsync()
     {
-        if (isInitialized && AuthenticationService.Instance.IsSignedIn)
-        {
-            return true;
-        }
-
         try
         {
             StatusMessage = "Connecting to Unity Gaming Services...";
             HasError = false;
 
-            if (UnityServices.State == ServicesInitializationState.Uninitialized)
+            if (UnityServices.State != ServicesInitializationState.Initialized)
             {
                 await UnityServices.InitializeAsync();
             }
 
-            if (!AuthenticationService.Instance.IsSignedIn)
+            if (AuthenticationService.Instance != null && AuthenticationService.Instance.IsSignedIn)
+            {
+                StatusMessage = "Ready";
+                return true;
+            }
+
+            if (AuthenticationService.Instance != null && !AuthenticationService.Instance.IsSignedIn)
             {
                 StatusMessage = "Authenticating with Unity Services...";
                 await AuthenticationService.Instance.SignInAnonymouslyAsync();
             }
 
-            isInitialized = true;
             StatusMessage = "Ready";
             return true;
+        }
+        catch (ServicesInitializationException sie)
+        {
+            StatusMessage = "Unity Services not linked. Switch to LOCAL (LAN) mode.";
+            HasError = true;
+            Debug.LogWarning($"[RelayManager] Unity Gaming Services not initialized: {sie.Message}. Use LOCAL (LAN / VPN) mode to play!");
+            return false;
+        }
+        catch (AuthenticationException ae)
+        {
+            StatusMessage = "Auth failed. Switch to LOCAL (LAN) mode.";
+            HasError = true;
+            Debug.LogWarning($"[RelayManager] Unity Authentication failed: {ae.Message}. Use LOCAL (LAN / VPN) mode!");
+            return false;
         }
         catch (Exception ex)
         {
             StatusMessage = $"Auth Error: {ex.Message}";
             HasError = true;
-            Debug.LogError($"[RelayManager] Services initialization failed: {ex}");
+            Debug.LogWarning($"[RelayManager] Services initialization failed: {ex.Message}. Use LOCAL (LAN / VPN) mode to play without UGS!");
             return false;
         }
     }

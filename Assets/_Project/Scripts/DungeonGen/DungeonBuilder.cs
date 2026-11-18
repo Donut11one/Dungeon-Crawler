@@ -1,48 +1,130 @@
 using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
 using Unity.AI.Navigation;
 
 /// <summary>
-/// Builds a static dungeon layout from Unity primitives at runtime.
-/// Rooms are positioned so their edges share the same world coordinate,
-/// meaning corridors exactly bridge every gap with no overlap and no void.
-/// Walls at junctions have a doorway opening so players can walk through.
+/// Source options for determining how the dungeon layout is selected at play time.
+/// </summary>
+public enum DungeonMapSource
+{
+    [Tooltip("Uses Active Layout if assigned; falls back to Built-In Code Map if empty.")]
+    AutoDetect = 0,
+
+    [Tooltip("Forces using the designed ScriptableObject asset assigned to Active Layout.")]
+    DesignedAsset = 1,
+
+    [Tooltip("Forces using the default procedural built-in code map.")]
+    BuiltInCodeMap = 2,
+
+    [Tooltip("Picks a random map from the Layout Pool each time a new round starts.")]
+    RandomFromPool = 3
+}
+
+/// <summary>
+/// Modular dungeon builder supporting both runtime procedural assembly and
+/// data-driven layout assets (DungeonLayoutData) authored by level designers.
+/// Assembles rooms, doorway openings, physical security blast doors, interactive levers,
+/// coins, monster spawns, and extraction pads.
+/// Synchronizes the selected layout across all connected players.
 /// </summary>
 public class DungeonBuilder : NetworkBehaviour
 {
     // ── Inspector ────────────────────────────────────────────────────────────
-    [Header("Layout")]
-    [SerializeField] private float wallHeight    = 4f;
-    [SerializeField] private float wallThickness = 0.3f;
-    [SerializeField] private float doorWidth     = 3.2f;   // opening at every junction
+    [Header("Level Design Data")]
+    [Tooltip("How the dungeon map is chosen when starting a run.")]
+    [SerializeField] private DungeonMapSource mapSource = DungeonMapSource.AutoDetect;
 
-    [Header("Spawning")]
-    [SerializeField] private int        coinCount   = 15;
-    [SerializeField] private int        enemyCount  = 2;
+    [Tooltip("Primary layout asset used when Map Source is AutoDetect or DesignedAsset.")]
+    [SerializeField] private DungeonLayoutData activeLayout;
+
+    [Tooltip("Pool of layout assets randomly chosen from when Map Source is RandomFromPool.")]
+    [SerializeField] private List<DungeonLayoutData> layoutPool = new List<DungeonLayoutData>();
+
+    [Header("Layout Settings")]
+    [SerializeField] private float wallHeight = 4f;
+    [SerializeField] private float wallThickness = 0.3f;
+    [SerializeField] private float doorWidth = 3.2f;
+
+    [Header("Prefabs")]
     [SerializeField] private GameObject coinPrefab;
     [SerializeField] private GameObject enemyPrefab;
     [SerializeField] private GameObject leverPrefab;
+    [SerializeField] private GameObject doorPrefab;
+
+    [Header("Default Fallback Quantities")]
+    [SerializeField] private int coinCount = 15;
+    [SerializeField] private int enemyCount = 2;
 
     [Header("Colors")]
-    [SerializeField] private Color floorColor   = new Color(0.25f, 0.25f, 0.28f);
-    [SerializeField] private Color wallColor    = new Color(0.35f, 0.32f, 0.30f);
+    [SerializeField] private Color floorColor = new Color(0.25f, 0.25f, 0.28f);
+    [SerializeField] private Color wallColor = new Color(0.35f, 0.32f, 0.30f);
     [SerializeField] private Color ceilingColor = new Color(0.20f, 0.20f, 0.22f);
 
-    // ── State ────────────────────────────────────────────────────────────────
-    private GameObject    dungeonRoot;
-    private NavMeshSurface navSurface;
-    private GameObject    extractionPointObj;
+    // ── Network State ────────────────────────────────────────────────────────
+    public NetworkVariable<FixedString64Bytes> SynchronizedLayoutName = new NetworkVariable<FixedString64Bytes>(
+        "",
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
 
-    private readonly System.Collections.Generic.List<Vector3>     coinSpawnPoints   = new();
-    private readonly System.Collections.Generic.List<Vector3>     enemySpawnPoints  = new();
-    private readonly System.Collections.Generic.List<Vector3>     playerSpawnPoints = new();
-    private readonly System.Collections.Generic.List<GameObject>  spawnedCoins      = new();
-    private readonly System.Collections.Generic.List<GameObject>  spawnedEnemies    = new();
-    private readonly System.Collections.Generic.List<DungeonRoom> dungeonRooms      = new();
+    // ── State ────────────────────────────────────────────────────────────────
+    private GameObject dungeonRoot;
+    private NavMeshSurface navSurface;
+    private GameObject extractionPointObj;
+    private DungeonLayoutData currentResolvedLayout;
+
+    private readonly List<Vector3> coinSpawnPoints = new();
+    private readonly List<Vector3> enemySpawnPoints = new();
+    private readonly List<string> enemySpawnArchetypes = new();
+    private readonly List<Vector3> playerSpawnPoints = new();
+    private readonly List<GameObject> spawnedCoins = new();
+    private readonly List<GameObject> spawnedEnemies = new();
+    private readonly List<DungeonRoom> dungeonRooms = new();
 
     // ── Public API ───────────────────────────────────────────────────────────
+    public DungeonMapSource MapSource
+    {
+        get
+        {
+            return mapSource;
+        }
+        set
+        {
+            mapSource = value;
+        }
+    }
+
+    public DungeonLayoutData ActiveLayout
+    {
+        get
+        {
+            return activeLayout;
+        }
+        set
+        {
+            activeLayout = value;
+        }
+    }
+
+    public List<DungeonLayoutData> LayoutPool
+    {
+        get
+        {
+            return layoutPool;
+        }
+    }
+
+    public DungeonLayoutData CurrentResolvedLayout
+    {
+        get
+        {
+            return currentResolvedLayout != null ? currentResolvedLayout : GetResolvedLayout();
+        }
+    }
+
     public GameObject CoinPrefab
     {
         get
@@ -59,7 +141,15 @@ public class DungeonBuilder : NetworkBehaviour
         }
     }
 
-    public System.Collections.Generic.IReadOnlyList<DungeonRoom> Rooms
+    public GameObject DoorPrefab
+    {
+        get
+        {
+            return doorPrefab;
+        }
+    }
+
+    public IReadOnlyList<DungeonRoom> Rooms
     {
         get
         {
@@ -84,21 +174,64 @@ public class DungeonBuilder : NetworkBehaviour
         return playerSpawnPoints[index % playerSpawnPoints.Count];
     }
 
+    /// <summary>
+    /// Resolves which layout data asset should be used based on mapSource configuration.
+    /// Returns null if the built-in procedural code map should be used.
+    /// </summary>
+    public DungeonLayoutData GetResolvedLayout()
+    {
+        switch (mapSource)
+        {
+            case DungeonMapSource.BuiltInCodeMap:
+                return null;
+
+            case DungeonMapSource.DesignedAsset:
+                return activeLayout;
+
+            case DungeonMapSource.RandomFromPool:
+                if (layoutPool != null && layoutPool.Count > 0)
+                {
+                    int randomIndex = Random.Range(0, layoutPool.Count);
+                    return layoutPool[randomIndex];
+                }
+                return activeLayout;
+
+            case DungeonMapSource.AutoDetect:
+            default:
+                if (activeLayout != null && activeLayout.rooms.Count > 0)
+                {
+                    return activeLayout;
+                }
+                return null;
+        }
+    }
+
     // ── Unity / NGO lifecycle ────────────────────────────────────────────────
     private void Awake()
     {
         EnsureCoinPrefab();
         EnsureLeverPrefab();
+        EnsureDoorPrefab();
         RegisterPrefabs();
     }
 
     public override void OnNetworkSpawn()
     {
-        BuildDungeon();
-        CreateExtractionPoint();
-
         if (IsServer)
         {
+            currentResolvedLayout = GetResolvedLayout();
+            if (currentResolvedLayout != null)
+            {
+                SynchronizedLayoutName.Value = currentResolvedLayout.layoutName;
+            }
+            else
+            {
+                SynchronizedLayoutName.Value = "";
+            }
+
+            BuildDungeon();
+            CreateExtractionPoint();
+
             if (navSurface != null)
             {
                 navSurface.BuildNavMesh();
@@ -107,6 +240,51 @@ public class DungeonBuilder : NetworkBehaviour
             SpawnEnemies();
             SpawnModularFeatures();
         }
+        else
+        {
+            SynchronizedLayoutName.OnValueChanged += OnSynchronizedLayoutNameChanged;
+            ApplySynchronizedLayout(SynchronizedLayoutName.Value.ToString());
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        SynchronizedLayoutName.OnValueChanged -= OnSynchronizedLayoutNameChanged;
+    }
+
+    private void OnSynchronizedLayoutNameChanged(FixedString64Bytes previous, FixedString64Bytes current)
+    {
+        ApplySynchronizedLayout(current.ToString());
+    }
+
+    private void ApplySynchronizedLayout(string layoutName)
+    {
+        if (string.IsNullOrEmpty(layoutName))
+        {
+            currentResolvedLayout = null;
+        }
+        else if (activeLayout != null && string.Equals(activeLayout.layoutName, layoutName, System.StringComparison.OrdinalIgnoreCase))
+        {
+            currentResolvedLayout = activeLayout;
+        }
+        else
+        {
+            currentResolvedLayout = null;
+            if (layoutPool != null)
+            {
+                for (int i = 0; i < layoutPool.Count; i++)
+                {
+                    if (layoutPool[i] != null && string.Equals(layoutPool[i].layoutName, layoutName, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        currentResolvedLayout = layoutPool[i];
+                        break;
+                    }
+                }
+            }
+        }
+
+        BuildDungeon();
+        CreateExtractionPoint();
     }
 
     private void EnsureCoinPrefab()
@@ -157,70 +335,239 @@ public class DungeonBuilder : NetworkBehaviour
         }
     }
 
+    private void EnsureDoorPrefab()
+    {
+        if (doorPrefab != null)
+        {
+            return;
+        }
+
+#if UNITY_EDITOR
+        doorPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Dungeon/DoorPrefab.prefab");
+#endif
+
+        if (doorPrefab == null && NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
+        {
+            foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
+            {
+                if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<DungeonDoor>() != null)
+                {
+                    doorPrefab = netPrefab.Prefab;
+                    break;
+                }
+            }
+        }
+    }
+
     // ── Registration ─────────────────────────────────────────────────────────
     private void RegisterPrefabs()
     {
         EnsureCoinPrefab();
         EnsureLeverPrefab();
+        EnsureDoorPrefab();
 
         if (NetworkManager.Singleton == null || NetworkManager.Singleton.NetworkConfig == null)
         {
             return;
         }
 
-        if (coinPrefab != null &&
-            !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(coinPrefab))
+        if (coinPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(coinPrefab))
         {
             NetworkManager.Singleton.AddNetworkPrefab(coinPrefab);
         }
 
-        if (enemyPrefab != null &&
-            !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(enemyPrefab))
+        if (enemyPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(enemyPrefab))
         {
             NetworkManager.Singleton.AddNetworkPrefab(enemyPrefab);
         }
 
-        if (leverPrefab != null &&
-            !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(leverPrefab))
+        if (leverPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(leverPrefab))
         {
             NetworkManager.Singleton.AddNetworkPrefab(leverPrefab);
         }
+
+        if (doorPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(doorPrefab))
+        {
+            NetworkManager.Singleton.AddNetworkPrefab(doorPrefab);
+        }
     }
 
-    // ── Layout ───────────────────────────────────────────────────────────────
-    //
-    //  Room positions are chosen so edges align exactly:
-    //
-    //   WestDeadEnd(−23,0,0) w6  |WestCorridor(−14,0,0) w12|  MainHall(0,0,0) w16
-    //   east edge x=−20          east −8 / west −20          east x=8 / west x=−8
-    //
-    //                                 NorthStorage(0,0,26) d8
-    //                                 south edge z=22
-    //                                 NorthCorridor(0,0,15) d14
-    //                                 south z=8 / north z=22
-    //                                 MainHall north edge z=8
-    //
-    //                              MainHall east edge x=8
-    //                              EastCorridor(15,0,0) w14
-    //                              west x=8 / east x=22
-    //                              EastChamber(26,0,0) w8
-    //                              west edge x=22
-    //
-    private void BuildDungeon()
+    // ── Layout Assembly ──────────────────────────────────────────────────────
+    public void BuildDungeon()
     {
+        ClearDungeonHierarchy();
+
         dungeonRoot = new GameObject("Dungeon");
         dungeonRooms.Clear();
+        coinSpawnPoints.Clear();
+        enemySpawnPoints.Clear();
+        enemySpawnArchetypes.Clear();
+        playerSpawnPoints.Clear();
 
+        DungeonLayoutData layout = currentResolvedLayout != null ? currentResolvedLayout : GetResolvedLayout();
+
+        if (layout != null && layout.rooms.Count > 0)
+        {
+            BuildFromLayoutData(layout);
+        }
+        else
+        {
+            BuildDefaultLayout();
+        }
+
+        // NavMesh surface on dungeon root
+        navSurface = dungeonRoot.AddComponent<NavMeshSurface>();
+        navSurface.collectObjects = CollectObjects.Children;
+    }
+
+    private void ClearDungeonHierarchy()
+    {
+        if (dungeonRoot != null)
+        {
+            if (Application.isPlaying)
+            {
+                Destroy(dungeonRoot);
+            }
+            else
+            {
+                DestroyImmediate(dungeonRoot);
+            }
+            dungeonRoot = null;
+        }
+
+        GameObject existing = GameObject.Find("Dungeon");
+        if (existing != null)
+        {
+            if (Application.isPlaying)
+            {
+                Destroy(existing);
+            }
+            else
+            {
+                DestroyImmediate(existing);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds the layout using an authored DungeonLayoutData asset.
+    /// </summary>
+    private void BuildFromLayoutData(DungeonLayoutData layout)
+    {
+        float defaultH = layout.defaultWallHeight > 0f ? layout.defaultWallHeight : wallHeight;
+
+        for (int r = 0; r < layout.rooms.Count; r++)
+        {
+            RoomLayoutData roomData = layout.rooms[r];
+            float h = roomData.dimensions.y > 0f ? roomData.dimensions.y : defaultH;
+
+            // Convert doorway definitions
+            List<Door> doors = new List<Door>();
+            for (int d = 0; d < roomData.doorways.Count; d++)
+            {
+                DoorwayDefinition def = roomData.doorways[d];
+                Door.Side s = def.side switch
+                {
+                    WallSide.North => Door.Side.N,
+                    WallSide.South => Door.Side.S,
+                    WallSide.East => Door.Side.E,
+                    _ => Door.Side.W
+                };
+                doors.Add(new Door(s, def.width, def.offset, def.hasDoor, def.doorChannel, def.doorStartsOpen));
+            }
+
+            DungeonRoom room = Room(
+                roomData.position,
+                roomData.dimensions.x,
+                roomData.dimensions.z,
+                roomData.roomLabel,
+                roomData.floorColor,
+                roomData.wallColor,
+                roomData.ceilingColor,
+                doors.ToArray()
+            );
+
+            // Sockets for levers
+            for (int l = 0; l < roomData.levers.Count; l++)
+            {
+                LeverPlacementData lever = roomData.levers[l];
+                room.AddSocket(
+                    $"{roomData.roomId}_Lever_{l}",
+                    SocketType.WallMount,
+                    lever.localPosition,
+                    Quaternion.Euler(lever.localEulerAngles),
+                    leverPrefab,
+                    lever.mechanismChannel
+                );
+            }
+
+            // Sockets for standalone doors
+            for (int d = 0; d < roomData.doors.Count; d++)
+            {
+                DoorPlacementData door = roomData.doors[d];
+                room.AddSocket(
+                    $"{roomData.roomId}_CustomDoor_{d}",
+                    SocketType.Doorway,
+                    door.localPosition,
+                    Quaternion.Euler(door.localEulerAngles),
+                    doorPrefab,
+                    door.mechanismChannel
+                );
+            }
+
+            // Coin spawns
+            for (int c = 0; c < roomData.coinSpawns.Count; c++)
+            {
+                coinSpawnPoints.Add(roomData.position + roomData.coinSpawns[c]);
+            }
+
+            // Enemy spawns
+            for (int e = 0; e < roomData.enemySpawns.Count; e++)
+            {
+                enemySpawnPoints.Add(roomData.position + roomData.enemySpawns[e].localPosition);
+                enemySpawnArchetypes.Add(roomData.enemySpawns[e].enemyId);
+            }
+
+            // Player spawns
+            for (int p = 0; p < roomData.playerSpawns.Count; p++)
+            {
+                playerSpawnPoints.Add(roomData.position + roomData.playerSpawns[p]);
+            }
+
+            // Extraction point
+            if (roomData.hasExtractionPoint)
+            {
+                Vector3 extPos = roomData.position + roomData.extractionLocalPosition;
+                CreateCustomExtractionPoint(extPos);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds the default facility dungeon with connected corridors,
+    /// a security blast door on the North Doorway linked to the Main Hall lever,
+    /// coins, enemies, and an extraction point.
+    /// </summary>
+    private void BuildDefaultLayout()
+    {
         float dw = doorWidth;
 
         // ── MAIN HALL (16 × 16, centre 0,0,0) ───────────────────────────────
-        //   north edge z=8, east edge x=8, west edge x=-8
-        DungeonRoom mainHall = Room(Vector3.zero, 16f, 16f, "MainHall",
-            Door.N(dw),
+        // North Doorway has an unlockable blast door linked to "MainHall_NorthGate"
+        DungeonRoom mainHall = Room(
+            Vector3.zero,
+            16f,
+            16f,
+            "MainHall",
+            floorColor,
+            wallColor,
+            ceilingColor,
+            Door.N(dw, 0f, true, "MainHall_NorthGate", false),
             Door.E(dw),
-            Door.W(dw));
+            Door.W(dw)
+        );
 
-        // Modular room socket for interactive Security Lever
+        // Security lever on North wall that unlocks the North Blast Door!
         mainHall.AddSocket(
             "MainHall_NorthLever",
             SocketType.WallMount,
@@ -231,82 +578,130 @@ public class DungeonBuilder : NetworkBehaviour
         );
 
         playerSpawnPoints.Add(new Vector3(-3f, 1f, -3f));
-        playerSpawnPoints.Add(new Vector3( 3f, 1f, -3f));
-        playerSpawnPoints.Add(new Vector3( 0f, 1f,  3f));
-        Coins( new Vector3(-5f, 0.8f,  5f),
-               new Vector3( 5f, 0.8f,  5f),
-               new Vector3( 0f, 0.8f, -5f),
-               new Vector3(-5f, 0.8f, -5f),
-               new Vector3( 4f, 0.8f, -4f));
-        // NOTE: No enemies spawn in the starting room (MainHall)
+        playerSpawnPoints.Add(new Vector3(3f, 1f, -3f));
+        playerSpawnPoints.Add(new Vector3(0f, 1f, 3f));
+        Coins(
+            new Vector3(-5f, 0.8f, 5f),
+            new Vector3(5f, 0.8f, 5f),
+            new Vector3(0f, 0.8f, -5f),
+            new Vector3(-5f, 0.8f, -5f),
+            new Vector3(4f, 0.8f, -4f)
+        );
 
         // ── NORTH CORRIDOR (4 × 14, centre 0,0,15) ──────────────────────────
-        //   south edge z=8  →  meets MainHall north  (depth/2=7, centre.z=15, z=15-7=8 ✓)
-        //   north edge z=22 →  meets NorthStorage south
-        Room(new Vector3(0f, 0f, 15f), 4f, 14f, "NorthCorridor",
+        Room(
+            new Vector3(0f, 0f, 15f),
+            4f,
+            14f,
+            "NorthCorridor",
+            floorColor,
+            wallColor,
+            ceilingColor,
             Door.S(dw),
-            Door.N(dw));
+            Door.N(dw)
+        );
 
-        Coins( new Vector3( 1f, 0.8f, 13f),
-               new Vector3(-1f, 0.8f, 17f));
+        Coins(
+            new Vector3(1f, 0.8f, 13f),
+            new Vector3(-1f, 0.8f, 17f)
+        );
         enemySpawnPoints.Add(new Vector3(0f, 0.5f, 15f));
+        enemySpawnArchetypes.Add("");
 
         // ── NORTH STORAGE (10 × 8, centre 0,0,26) ───────────────────────────
-        //   south edge z=22  (depth/2=4, centre.z=26, z=26-4=22 ✓)
-        Room(new Vector3(0f, 0f, 26f), 10f, 8f, "NorthStorage",
-            Door.S(dw));
+        Room(
+            new Vector3(0f, 0f, 26f),
+            10f,
+            8f,
+            "NorthStorage",
+            floorColor,
+            wallColor,
+            ceilingColor,
+            Door.S(dw)
+        );
 
-        Coins( new Vector3(-3f, 0.8f, 25f),
-               new Vector3( 3f, 0.8f, 27f),
-               new Vector3( 0f, 0.8f, 29f),
-               new Vector3(-4f, 0.8f, 27f));
+        Coins(
+            new Vector3(-3f, 0.8f, 25f),
+            new Vector3(3f, 0.8f, 27f),
+            new Vector3(0f, 0.8f, 29f),
+            new Vector3(-4f, 0.8f, 27f)
+        );
         enemySpawnPoints.Add(new Vector3(0f, 0.5f, 26f));
+        enemySpawnArchetypes.Add("");
 
         // ── EAST CORRIDOR (14 × 4, centre 15,0,0) ───────────────────────────
-        //   west edge x=8  →  meets MainHall east  (width/2=7, centre.x=15, x=15-7=8 ✓)
-        //   east edge x=22 →  meets EastChamber west
-        Room(new Vector3(15f, 0f, 0f), 14f, 4f, "EastCorridor",
+        Room(
+            new Vector3(15f, 0f, 0f),
+            14f,
+            4f,
+            "EastCorridor",
+            floorColor,
+            wallColor,
+            ceilingColor,
             Door.W(dw),
-            Door.E(dw));
+            Door.E(dw)
+        );
 
-        Coins( new Vector3(13f, 0.8f,  0f),
-               new Vector3(17f, 0.8f,  1f));
+        Coins(
+            new Vector3(13f, 0.8f, 0f),
+            new Vector3(17f, 0.8f, 1f)
+        );
 
         // ── EAST CHAMBER (8 × 10, centre 26,0,0) ────────────────────────────
-        //   west edge x=22  (width/2=4, centre.x=26, x=26-4=22 ✓)
-        //   EXTRACTION POINT IS HERE
-        Room(new Vector3(26f, 0f, 0f), 8f, 10f, "EastChamber",
-            Door.W(dw));
+        Room(
+            new Vector3(26f, 0f, 0f),
+            8f,
+            10f,
+            "EastChamber",
+            floorColor,
+            wallColor,
+            ceilingColor,
+            Door.W(dw)
+        );
 
-        Coins( new Vector3(25f, 0.8f, -3f),
-               new Vector3(27f, 0.8f,  3f));
+        Coins(
+            new Vector3(25f, 0.8f, -3f),
+            new Vector3(27f, 0.8f, 3f)
+        );
         enemySpawnPoints.Add(new Vector3(26f, 0.5f, 3f));
+        enemySpawnArchetypes.Add("");
 
         // ── WEST CORRIDOR (12 × 4, centre -14,0,0) ──────────────────────────
-        //   east edge x=-8  (width/2=6, centre.x=-14, x=-14+6=-8 ✓)
-        //   west edge x=-20 →  meets WestDeadEnd east
-        Room(new Vector3(-14f, 0f, 0f), 12f, 4f, "WestCorridor",
+        Room(
+            new Vector3(-14f, 0f, 0f),
+            12f,
+            4f,
+            "WestCorridor",
+            floorColor,
+            wallColor,
+            ceilingColor,
             Door.E(dw),
-            Door.W(dw));
+            Door.W(dw)
+        );
 
         // ── WEST DEAD-END (6 × 6, centre -23,0,0) ───────────────────────────
-        //   east edge x=-20  (width/2=3, centre.x=-23, x=-23+3=-20 ✓)
-        Room(new Vector3(-23f, 0f, 0f), 6f, 6f, "WestDeadEnd",
-            Door.E(dw));
+        Room(
+            new Vector3(-23f, 0f, 0f),
+            6f,
+            6f,
+            "WestDeadEnd",
+            floorColor,
+            wallColor,
+            ceilingColor,
+            Door.E(dw)
+        );
 
-        Coins( new Vector3(-23f, 0.8f,  0f),
-               new Vector3(-21f, 0.8f,  2f),
-               new Vector3(-24f, 0.8f, -2f));
+        Coins(
+            new Vector3(-23f, 0.8f, 0f),
+            new Vector3(-21f, 0.8f, 2f),
+            new Vector3(-24f, 0.8f, -2f)
+        );
         enemySpawnPoints.Add(new Vector3(-23f, 0.5f, 0f));
-
-        // NavMesh surface
-        navSurface = dungeonRoot.AddComponent<NavMeshSurface>();
-        navSurface.collectObjects = CollectObjects.Children;
+        enemySpawnArchetypes.Add("");
     }
 
     // ── Doorway descriptor ───────────────────────────────────────────────────
-
-    private struct Door
+    public struct Door
     {
         public enum Side
         {
@@ -316,45 +711,58 @@ public class DungeonBuilder : NetworkBehaviour
             W
         }
 
-        public Side  side;
+        public Side side;
         public float width;
-        public float offset; // shift along wall (0 = centred)
+        public float offset;
+        public bool hasDoor;
+        public string doorChannel;
+        public bool doorStartsOpen;
 
-        private Door(Side s, float w, float o)
+        public Door(Side s, float w, float o, bool hasDoor = false, string channel = "", bool startsOpen = false)
         {
             side = s;
             width = w;
             offset = o;
+            this.hasDoor = hasDoor;
+            this.doorChannel = channel;
+            this.doorStartsOpen = startsOpen;
         }
 
-        public static Door N(float w, float o = 0f)
+        public static Door N(float w, float o = 0f, bool hasDoor = false, string channel = "", bool startsOpen = false)
         {
-            return new Door(Side.N, w, o);
+            return new Door(Side.N, w, o, hasDoor, channel, startsOpen);
         }
 
-        public static Door S(float w, float o = 0f)
+        public static Door S(float w, float o = 0f, bool hasDoor = false, string channel = "", bool startsOpen = false)
         {
-            return new Door(Side.S, w, o);
+            return new Door(Side.S, w, o, hasDoor, channel, startsOpen);
         }
 
-        public static Door E(float w, float o = 0f)
+        public static Door E(float w, float o = 0f, bool hasDoor = false, string channel = "", bool startsOpen = false)
         {
-            return new Door(Side.E, w, o);
+            return new Door(Side.E, w, o, hasDoor, channel, startsOpen);
         }
 
-        public static Door W(float w, float o = 0f)
+        public static Door W(float w, float o = 0f, bool hasDoor = false, string channel = "", bool startsOpen = false)
         {
-            return new Door(Side.W, w, o);
+            return new Door(Side.W, w, o, hasDoor, channel, startsOpen);
         }
     }
 
     // ── Room construction ────────────────────────────────────────────────────
-
-    private DungeonRoom Room(Vector3 centre, float width, float depth,
-                             string label, params Door[] doors)
+    private DungeonRoom Room(
+        Vector3 centre,
+        float width,
+        float depth,
+        string label,
+        Color floorCol,
+        Color wallCol,
+        Color ceilingCol,
+        params Door[] doors
+    )
     {
         GameObject go = new GameObject(label);
-        go.transform.parent   = dungeonRoot.transform;
+        go.transform.parent = dungeonRoot.transform;
         go.transform.position = centre;
 
         DungeonRoom room = go.AddComponent<DungeonRoom>();
@@ -362,141 +770,157 @@ public class DungeonBuilder : NetworkBehaviour
         dungeonRooms.Add(room);
 
         // Floor
-        Prim(go.transform, "Floor",
-            Vector3.zero,
-            new Vector3(width, 0.2f, depth),
-            floorColor);
+        Prim(go.transform, "Floor", Vector3.zero, new Vector3(width, 0.2f, depth), floorCol);
 
         // Ceiling
-        Prim(go.transform, "Ceiling",
-            new Vector3(0f, wallHeight, 0f),
-            new Vector3(width, 0.2f, depth),
-            ceilingColor);
+        Prim(go.transform, "Ceiling", new Vector3(0f, wallHeight, 0f), new Vector3(width, 0.2f, depth), ceilingCol);
 
-        // Four walls (with optional doorways)
-        BuildWall(go.transform, Door.Side.N, width, depth, doors);
-        BuildWall(go.transform, Door.Side.S, width, depth, doors);
-        BuildWall(go.transform, Door.Side.E, width, depth, doors);
-        BuildWall(go.transform, Door.Side.W, width, depth, doors);
+        // Four walls (with doorway cuts)
+        BuildWall(go.transform, Door.Side.N, width, depth, wallCol, doors);
+        BuildWall(go.transform, Door.Side.S, width, depth, wallCol, doors);
+        BuildWall(go.transform, Door.Side.E, width, depth, wallCol, doors);
+        BuildWall(go.transform, Door.Side.W, width, depth, wallCol, doors);
+
+        // For any doorway with hasDoor = true, add a modular door socket!
+        for (int i = 0; i < doors.Length; i++)
+        {
+            Door d = doors[i];
+            if (!d.hasDoor)
+            {
+                continue;
+            }
+
+            Vector3 doorLocalPos = d.side switch
+            {
+                Door.Side.N => new Vector3(d.offset, 0f, depth * 0.5f),
+                Door.Side.S => new Vector3(d.offset, 0f, -depth * 0.5f),
+                Door.Side.E => new Vector3(width * 0.5f, 0f, d.offset),
+                _ => new Vector3(-width * 0.5f, 0f, d.offset)
+            };
+
+            Quaternion doorLocalRot = d.side switch
+            {
+                Door.Side.N => Quaternion.identity,
+                Door.Side.S => Quaternion.Euler(0f, 180f, 0f),
+                Door.Side.E => Quaternion.Euler(0f, 90f, 0f),
+                _ => Quaternion.Euler(0f, -90f, 0f)
+            };
+
+            room.AddSocket(
+                $"{label}_Door_{d.side}",
+                SocketType.Doorway,
+                doorLocalPos,
+                doorLocalRot,
+                doorPrefab,
+                d.doorChannel,
+                true
+            );
+        }
 
         return room;
     }
 
-    private void BuildWall(Transform parent, Door.Side side,
-                            float roomW, float roomD, Door[] doors)
+    private void BuildWall(
+        Transform parent,
+        Door.Side side,
+        float roomW,
+        float roomD,
+        Color wallCol,
+        Door[] doors
+    )
     {
-        // Find matching doorway (if any)
         Door? door = null;
-        foreach (Door d in doors)
+        for (int i = 0; i < doors.Length; i++)
         {
-            if (d.side == side)
+            if (doors[i].side == side)
             {
-                door = d;
+                door = doors[i];
                 break;
             }
         }
 
         bool nsWall = side == Door.Side.N || side == Door.Side.S;
-        float span  = nsWall ? roomW : roomD;  // wall runs along this length
+        float span = nsWall ? roomW : roomD;
 
-        // Wall centre in room-local space
         Vector3 wallCentre = side switch
         {
-            Door.Side.N => new Vector3(0f,          wallHeight * 0.5f,  roomD * 0.5f),
-            Door.Side.S => new Vector3(0f,          wallHeight * 0.5f, -roomD * 0.5f),
-            Door.Side.E => new Vector3( roomW * 0.5f, wallHeight * 0.5f, 0f),
-            _           => new Vector3(-roomW * 0.5f, wallHeight * 0.5f, 0f),
+            Door.Side.N => new Vector3(0f, wallHeight * 0.5f, roomD * 0.5f),
+            Door.Side.S => new Vector3(0f, wallHeight * 0.5f, -roomD * 0.5f),
+            Door.Side.E => new Vector3(roomW * 0.5f, wallHeight * 0.5f, 0f),
+            _ => new Vector3(-roomW * 0.5f, wallHeight * 0.5f, 0f)
         };
 
-        // Span axis (direction along which the wall extends)
         Vector3 spanAxis = nsWall ? Vector3.right : Vector3.forward;
 
         if (door == null)
         {
-            // Solid wall
             Vector3 scale = nsWall
-                ? new Vector3(span,          wallHeight, wallThickness)
+                ? new Vector3(span, wallHeight, wallThickness)
                 : new Vector3(wallThickness, wallHeight, span);
-            Prim(parent, $"Wall{side}", wallCentre, scale, wallColor);
+            Prim(parent, $"Wall{side}", wallCentre, scale, wallCol);
             return;
         }
 
-        // ── Wall with doorway ────────────────────────────────────────────────
-        // Door occupies: [doorCentre - halfDoor .. doorCentre + halfDoor]
-        // Everything outside that range becomes a wall segment.
         float halfSpan = span * 0.5f;
         float halfDoor = door.Value.width * 0.5f;
-        float dc       = door.Value.offset;          // door centre offset from wall mid
+        float dc = door.Value.offset;
 
-        float gapL = dc - halfDoor;    // gap left edge  (relative to wall centre)
-        float gapR = dc + halfDoor;    // gap right edge
+        float gapL = dc - halfDoor;
+        float gapR = dc + halfDoor;
 
-        // Clamp to wall extents
         gapL = Mathf.Clamp(gapL, -halfSpan, halfSpan);
         gapR = Mathf.Clamp(gapR, -halfSpan, halfSpan);
 
-        // Left segment: from -halfSpan to gapL
         float leftLen = gapL + halfSpan;
         if (leftLen > 0.05f)
         {
             float centreOfs = -halfSpan + leftLen * 0.5f;
-            Vector3 pos     = wallCentre + spanAxis * centreOfs;
-            Vector3 scale   = nsWall
-                ? new Vector3(leftLen,       wallHeight, wallThickness)
+            Vector3 pos = wallCentre + spanAxis * centreOfs;
+            Vector3 scale = nsWall
+                ? new Vector3(leftLen, wallHeight, wallThickness)
                 : new Vector3(wallThickness, wallHeight, leftLen);
-            Prim(parent, $"Wall{side}_L", pos, scale, wallColor);
+            Prim(parent, $"Wall{side}_L", pos, scale, wallCol);
         }
 
-        // Right segment: from gapR to +halfSpan
         float rightLen = halfSpan - gapR;
         if (rightLen > 0.05f)
         {
             float centreOfs = halfSpan - rightLen * 0.5f;
-            Vector3 pos     = wallCentre + spanAxis * centreOfs;
-            Vector3 scale   = nsWall
-                ? new Vector3(rightLen,      wallHeight, wallThickness)
+            Vector3 pos = wallCentre + spanAxis * centreOfs;
+            Vector3 scale = nsWall
+                ? new Vector3(rightLen, wallHeight, wallThickness)
                 : new Vector3(wallThickness, wallHeight, rightLen);
-            Prim(parent, $"Wall{side}_R", pos, scale, wallColor);
+            Prim(parent, $"Wall{side}_R", pos, scale, wallCol);
         }
-
-        // Note: no lintel needed — full-height door opening lets tall players through
     }
 
-    // ── Primitive factory ────────────────────────────────────────────────────
-
-    private void Prim(Transform parent, string label,
-                       Vector3 localPos, Vector3 scale, Color color)
+    private void Prim(Transform parent, string label, Vector3 localPos, Vector3 scale, Color color)
     {
-        GameObject obj          = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        obj.name                = label;
-        obj.transform.parent    = parent;
+        GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        obj.name = label;
+        obj.transform.parent = parent;
         obj.transform.localPosition = localPos;
-        obj.transform.localScale    = scale;
-        obj.isStatic            = true;
+        obj.transform.localScale = scale;
+        obj.isStatic = true;
 
         Renderer rend = obj.GetComponent<Renderer>();
         if (rend != null)
         {
-            rend.material = MaterialHelper.CreateLitMaterial(rend, color);
+            MaterialHelper.ApplyMaterial(rend, color);
         }
     }
-
-    // ── Coin helper ──────────────────────────────────────────────────────────
 
     private void Coins(params Vector3[] points)
     {
-        foreach (Vector3 p in points)
+        for (int i = 0; i < points.Length; i++)
         {
-            coinSpawnPoints.Add(p);
+            coinSpawnPoints.Add(points[i]);
         }
     }
 
-    // ── Entity spawning ──────────────────────────────────────────────────────
-
+    // ── Entity Spawning ──────────────────────────────────────────────────────
     private void SpawnCoins()
     {
-        EnsureCoinPrefab();
-
         if (coinPrefab == null)
         {
             Debug.LogError("[DungeonBuilder] No coin prefab assigned and could not find one!");
@@ -528,6 +952,7 @@ public class DungeonBuilder : NetworkBehaviour
 
         int count = Mathf.Min(enemyCount, enemySpawnPoints.Count);
         List<EnemyData> allEnemies = EnemyRegistry.GetAllEnemies();
+
         for (int i = 0; i < count; i++)
         {
             GameObject e = Instantiate(enemyPrefab, enemySpawnPoints[i], Quaternion.identity);
@@ -537,12 +962,26 @@ public class DungeonBuilder : NetworkBehaviour
                 no.Spawn();
             }
 
-            // Assign varied enemy archetype from JSON database
             EnemyHealth eh = e.GetComponent<EnemyHealth>();
-            if (eh != null && allEnemies != null && allEnemies.Count > 0)
+            if (eh != null)
             {
-                EnemyData chosenData = allEnemies[i % allEnemies.Count];
-                eh.ApplyEnemyData(chosenData);
+                string targetId = i < enemySpawnArchetypes.Count ? enemySpawnArchetypes[i] : null;
+                EnemyData chosenData = null;
+
+                if (!string.IsNullOrEmpty(targetId))
+                {
+                    chosenData = EnemyRegistry.GetEnemy(targetId);
+                }
+
+                if (chosenData == null && allEnemies != null && allEnemies.Count > 0)
+                {
+                    chosenData = allEnemies[i % allEnemies.Count];
+                }
+
+                if (chosenData != null)
+                {
+                    eh.ApplyEnemyData(chosenData);
+                }
             }
 
             spawnedEnemies.Add(e);
@@ -567,10 +1006,20 @@ public class DungeonBuilder : NetworkBehaviour
             return;
         }
 
-        // EastChamber centre is (26, 0, 0)
+        CreateCustomExtractionPoint(new Vector3(26f, 0.1f, 0f));
+    }
+
+    private void CreateCustomExtractionPoint(Vector3 pos)
+    {
+        if (extractionPointObj != null)
+        {
+            extractionPointObj.transform.position = pos;
+            return;
+        }
+
         extractionPointObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         extractionPointObj.name = "ExtractionPoint";
-        extractionPointObj.transform.position   = new Vector3(26f, 0.1f, 0f);
+        extractionPointObj.transform.position = pos;
         extractionPointObj.transform.localScale = new Vector3(3f, 0.1f, 3f);
         if (dungeonRoot != null)
         {
@@ -580,19 +1029,20 @@ public class DungeonBuilder : NetworkBehaviour
         Renderer rend = extractionPointObj.GetComponent<Renderer>();
         if (rend != null)
         {
-            rend.material = MaterialHelper.CreateLitMaterial(rend, new Color(0.1f, 1f, 0.2f));
+            Color padColor = new Color(0.1f, 0.85f, 0.4f, 0.6f);
+            MaterialHelper.ApplyMaterial(rend, padColor);
         }
 
-        Destroy(extractionPointObj.GetComponent<CapsuleCollider>());
-        BoxCollider trigger = extractionPointObj.AddComponent<BoxCollider>();
-        trigger.isTrigger = true;
-        trigger.size      = new Vector3(1f, 20f, 1f);
+        Collider col = extractionPointObj.GetComponent<Collider>();
+        if (col != null)
+        {
+            col.isTrigger = true;
+        }
 
         extractionPointObj.AddComponent<ExtractionPoint>();
     }
 
-    // ── Round reset ──────────────────────────────────────────────────────────
-
+    // ── Round Reset ──────────────────────────────────────────────────────────
     public void ResetDungeonEntities()
     {
         if (!IsServer)
@@ -644,8 +1094,53 @@ public class DungeonBuilder : NetworkBehaviour
             }
         }
 
+        // If map source is RandomFromPool, re-pick a fresh map for the new dive!
+        if (mapSource == DungeonMapSource.RandomFromPool && layoutPool != null && layoutPool.Count > 0)
+        {
+            currentResolvedLayout = GetResolvedLayout();
+            SynchronizedLayoutName.Value = currentResolvedLayout != null ? currentResolvedLayout.layoutName : "";
+            BuildDungeon();
+            CreateExtractionPoint();
+            if (navSurface != null)
+            {
+                navSurface.BuildNavMesh();
+            }
+        }
+
         SpawnCoins();
         SpawnEnemies();
         SpawnModularFeatures();
     }
+
+    // ── Editor Helpers ───────────────────────────────────────────────────────
+#if UNITY_EDITOR
+    public void BuildDungeonInEditor()
+    {
+        EnsureCoinPrefab();
+        EnsureLeverPrefab();
+        EnsureDoorPrefab();
+        currentResolvedLayout = GetResolvedLayout();
+        BuildDungeon();
+        CreateExtractionPoint();
+
+        // Instantiate socket contents for visual preview in editor
+        for (int i = 0; i < dungeonRooms.Count; i++)
+        {
+            if (dungeonRooms[i] != null)
+            {
+                dungeonRooms[i].SpawnRoomFeatures(false);
+            }
+        }
+
+        if (navSurface != null)
+        {
+            navSurface.BuildNavMesh();
+        }
+    }
+
+    public void ClearDungeonInEditor()
+    {
+        ClearDungeonHierarchy();
+    }
+#endif
 }

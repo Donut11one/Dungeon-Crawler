@@ -123,6 +123,13 @@ public class RoomSocket : MonoBehaviour
             lever.SetMechanismChannel(mechanismChannel);
         }
 
+        // If the spawned object has a DungeonDoor, apply the socket's mechanism channel
+        DungeonDoor door = spawnedInstance.GetComponent<DungeonDoor>();
+        if (door != null && !string.IsNullOrEmpty(mechanismChannel))
+        {
+            door.SetMechanismChannel(mechanismChannel);
+        }
+
         // Spawn across network if running on server
         if (isServer)
         {

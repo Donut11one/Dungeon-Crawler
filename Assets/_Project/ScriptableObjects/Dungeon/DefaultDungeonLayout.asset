@@ -1,0 +1,152 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 072a6e31ed2d9294a90aa8625f1765ef, type: 3}
+  m_Name: DefaultDungeonLayout
+  m_EditorClassIdentifier: Assembly-CSharp::DungeonLayoutData
+  layoutName: Containment Facility Sublevel 1
+  defaultWallHeight: 4
+  defaultWallThickness: 0.3
+  defaultDoorWidth: 3.2
+  rooms:
+  - roomId: Room_10x10_704
+    roomLabel: Room_10x10_704
+    position: {x: -0.07399998, y: 0.00000023841858, z: 0}
+    dimensions: {x: 10, y: 4, z: 10}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 2
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    coinSpawns:
+    - {x: -0.926, y: 0.5, z: 2}
+    - {x: -0.926, y: 0.5, z: -4}
+    - {x: -1.926, y: 0.5, z: -2}
+    - {x: 2.074, y: 0.5, z: 3}
+    - {x: 2.074, y: 0.5, z: -2}
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 1
+    extractionLocalPosition: {x: 4.074, y: 0.15, z: -3}
+  - roomId: CoopPuzzleVault_893
+    roomLabel: CoopPuzzleVault_893
+    position: {x: 0, y: -0.00000014932746, z: 10}
+    dimensions: {x: 12, y: 4, z: 10}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 1
+      doorChannel: Vault_63
+      doorStartsOpen: 0
+    - side: 1
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers:
+    - leverName: Lever_Vault_63
+      localPosition: {x: 5.85, y: 1.4000001, z: 0}
+      localEulerAngles: {x: 0, y: 270, z: 0}
+      mechanismChannel: Vault_63
+      resetDelay: 0
+    - leverName: Lever_Vault_63
+      localPosition: {x: -5.85, y: 1.4000001, z: 0}
+      localEulerAngles: {x: 0, y: 90, z: -0}
+      mechanismChannel: Vault_63
+      resetDelay: 0
+    doors:
+    - doorName: 'Blast Door [Vault_63]'
+      localPosition: {x: 0, y: 0, z: 5}
+      localEulerAngles: {x: 0, y: 0, z: 0}
+      mechanismChannel: Vault_63
+      startsOpen: 0
+    coinSpawns:
+    - {x: -1.5, y: 0.4, z: 2}
+    - {x: 1.5, y: 0.4, z: 2}
+    - {x: 0, y: 0.4, z: 1}
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: Room_1
+    roomLabel: Room_1
+    position: {x: 9.918, y: 0, z: 0}
+    dimensions: {x: 10, y: 4, z: 10}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 3
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    coinSpawns: []
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: ConnectingCorridor_539
+    roomLabel: ConnectingCorridor_539
+    position: {x: 10.18, y: -0.00000004639446, z: 11.93}
+    dimensions: {x: 4, y: 4, z: 14}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 1
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    coinSpawns:
+    - {x: 0, y: 0.4, z: -3}
+    - {x: 0, y: 0.4, z: 3}
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}

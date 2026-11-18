@@ -328,7 +328,7 @@ public class DungeonLever : NetworkBehaviour
         if (statusLightRenderer != null)
         {
             Color lightCol = pulled ? activeColor : inactiveColor;
-            statusLightRenderer.material = MaterialHelper.CreateLitMaterial(statusLightRenderer, lightCol);
+            MaterialHelper.ApplyMaterial(statusLightRenderer, lightCol);
         }
     }
 
@@ -485,7 +485,7 @@ public class DungeonLever : NetworkBehaviour
             Renderer rend = baseObj.GetComponent<Renderer>();
             if (rend != null)
             {
-                rend.material = MaterialHelper.CreateLitMaterial(rend, new Color(0.22f, 0.22f, 0.25f));
+                MaterialHelper.ApplyMaterial(rend, new Color(0.22f, 0.22f, 0.25f));
             }
         }
 
@@ -504,7 +504,7 @@ public class DungeonLever : NetworkBehaviour
             statusLightRenderer = lightObj.GetComponent<Renderer>();
             if (statusLightRenderer != null)
             {
-                statusLightRenderer.material = MaterialHelper.CreateLitMaterial(statusLightRenderer, inactiveColor);
+                MaterialHelper.ApplyMaterial(statusLightRenderer, inactiveColor);
             }
         }
         else
@@ -534,7 +534,7 @@ public class DungeonLever : NetworkBehaviour
             Renderer rodRend = rod.GetComponent<Renderer>();
             if (rodRend != null)
             {
-                rodRend.material = MaterialHelper.CreateLitMaterial(rodRend, new Color(0.6f, 0.62f, 0.65f));
+                MaterialHelper.ApplyMaterial(rodRend, new Color(0.6f, 0.62f, 0.65f));
             }
 
             // Knob / Grip Ball
@@ -549,7 +549,7 @@ public class DungeonLever : NetworkBehaviour
             Renderer knobRend = knob.GetComponent<Renderer>();
             if (knobRend != null)
             {
-                knobRend.material = MaterialHelper.CreateLitMaterial(knobRend, new Color(1f, 0.75f, 0.1f)); // Industrial Yellow
+                MaterialHelper.ApplyMaterial(knobRend, new Color(1f, 0.75f, 0.1f)); // Industrial Yellow
             }
         }
         else

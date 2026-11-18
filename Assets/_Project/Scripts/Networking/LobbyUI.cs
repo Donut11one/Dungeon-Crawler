@@ -16,7 +16,7 @@ public class LobbyUI : MonoBehaviour
         LocalLan = 1
     }
 
-    private ConnectionMode currentMode = ConnectionMode.RelayOnline;
+    private ConnectionMode currentMode = ConnectionMode.LocalLan;
     private string relayJoinCode = string.Empty;
     private string lanAddress = "127.0.0.1";
     private Texture2D boxTexture;
@@ -181,6 +181,16 @@ public class LobbyUI : MonoBehaviour
             " Use DTLS Encryption (keep OFF for max compatibility)",
             toggleStyle
         );
+
+        if (RelayManager.HasError)
+        {
+            GUI.backgroundColor = new Color(0.2f, 0.85f, 0.4f);
+            if (GUI.Button(new Rect(x + 40f, y + 210f, btnW, 24f), "SWITCH TO LOCAL (LAN) MODE"))
+            {
+                currentMode = ConnectionMode.LocalLan;
+            }
+            GUI.backgroundColor = Color.white;
+        }
 
         GUI.enabled = true;
     }
