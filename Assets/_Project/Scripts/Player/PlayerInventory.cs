@@ -201,6 +201,54 @@ public class PlayerInventory : NetworkBehaviour
     }
 
     /// <summary>
+    /// Checks whether the inventory has capacity for the specified item and count.
+    /// Can be queried client-side or server-side.
+    /// </summary>
+    public bool CanAddItem(string itemId, int count = 1)
+    {
+        if (string.IsNullOrEmpty(itemId) || count <= 0)
+        {
+            return false;
+        }
+
+        ItemData data = ItemRegistry.GetItem(itemId);
+        int maxStack = data != null ? data.MaxStack : 1;
+
+        int remaining = count;
+
+        // 1. Check existing slots with same item
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            InventorySlot slot = Slots[i];
+            if (!slot.IsEmpty && slot.itemId.ToString() == itemId && slot.count < maxStack)
+            {
+                int space = maxStack - slot.count;
+                remaining -= space;
+                if (remaining <= 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        // 2. Check empty slots
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            InventorySlot slot = Slots[i];
+            if (slot.IsEmpty)
+            {
+                remaining -= maxStack;
+                if (remaining <= 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Server-authoritative: Adds an item into the hotbar.
     /// Returns true if successfully added, false if inventory full.
     /// </summary>

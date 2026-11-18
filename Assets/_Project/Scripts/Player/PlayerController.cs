@@ -197,15 +197,54 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+    public bool CanControl
+    {
+        get
+        {
+            if (IsRagdolled())
+            {
+                return false;
+            }
+
+            if (GameManager.Instance != null)
+            {
+                if (GameManager.Instance.CurrentState.Value == GameManager.GameState.RoundOver)
+                {
+                    return false;
+                }
+
+                if (GameManager.Instance.IsPlayerExtracted(OwnerClientId))
+                {
+                    return false;
+                }
+            }
+
+            PlayerHealth ph = GetComponent<PlayerHealth>();
+            if (ph != null && ph.IsDead.Value)
+            {
+                return false;
+            }
+
+            return true;
+        }
+    }
+
     private bool CanLockCursor()
     {
         if (ArmoryShopUI.Instance != null && ArmoryShopUI.Instance.IsOpen)
         {
             return false;
         }
-        if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value == GameManager.GameState.RoundOver)
+        if (GameManager.Instance != null)
         {
-            return false;
+            if (GameManager.Instance.CurrentState.Value == GameManager.GameState.RoundOver)
+            {
+                return false;
+            }
+            if (GameManager.Instance.IsPlayerExtracted(OwnerClientId))
+            {
+                return false;
+            }
         }
         return true;
     }
@@ -216,8 +255,12 @@ public class PlayerController : NetworkBehaviour
         {
             return;
         }
-        if (IsRagdolled())
+        if (!CanControl)
         {
+            if (rb != null && !rb.isKinematic)
+            {
+                rb.linearVelocity = new Vector3(0f, rb.linearVelocity.y, 0f);
+            }
             return;
         }
 
@@ -244,7 +287,7 @@ public class PlayerController : NetworkBehaviour
         {
             return;
         }
-        if (IsRagdolled())
+        if (!CanControl)
         {
             return;
         }

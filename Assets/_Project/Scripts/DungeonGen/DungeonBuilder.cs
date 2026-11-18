@@ -23,6 +23,7 @@ public class DungeonBuilder : NetworkBehaviour
     [SerializeField] private int        enemyCount  = 2;
     [SerializeField] private GameObject coinPrefab;
     [SerializeField] private GameObject enemyPrefab;
+    [SerializeField] private GameObject leverPrefab;
 
     [Header("Colors")]
     [SerializeField] private Color floorColor   = new Color(0.25f, 0.25f, 0.28f);
@@ -39,9 +40,32 @@ public class DungeonBuilder : NetworkBehaviour
     private readonly System.Collections.Generic.List<Vector3>     playerSpawnPoints = new();
     private readonly System.Collections.Generic.List<GameObject>  spawnedCoins      = new();
     private readonly System.Collections.Generic.List<GameObject>  spawnedEnemies    = new();
+    private readonly System.Collections.Generic.List<DungeonRoom> dungeonRooms      = new();
 
     // ── Public API ───────────────────────────────────────────────────────────
-    public GameObject CoinPrefab => coinPrefab;
+    public GameObject CoinPrefab
+    {
+        get
+        {
+            return coinPrefab;
+        }
+    }
+
+    public GameObject LeverPrefab
+    {
+        get
+        {
+            return leverPrefab;
+        }
+    }
+
+    public System.Collections.Generic.IReadOnlyList<DungeonRoom> Rooms
+    {
+        get
+        {
+            return dungeonRooms;
+        }
+    }
 
     public void TrackSpawnedCoin(GameObject coin)
     {
@@ -64,6 +88,7 @@ public class DungeonBuilder : NetworkBehaviour
     private void Awake()
     {
         EnsureCoinPrefab();
+        EnsureLeverPrefab();
         RegisterPrefabs();
     }
 
@@ -80,6 +105,7 @@ public class DungeonBuilder : NetworkBehaviour
             }
             SpawnCoins();
             SpawnEnemies();
+            SpawnModularFeatures();
         }
     }
 
@@ -107,10 +133,35 @@ public class DungeonBuilder : NetworkBehaviour
         }
     }
 
+    private void EnsureLeverPrefab()
+    {
+        if (leverPrefab != null)
+        {
+            return;
+        }
+
+#if UNITY_EDITOR
+        leverPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Dungeon/LeverPrefab.prefab");
+#endif
+
+        if (leverPrefab == null && NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
+        {
+            foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
+            {
+                if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<DungeonLever>() != null)
+                {
+                    leverPrefab = netPrefab.Prefab;
+                    break;
+                }
+            }
+        }
+    }
+
     // ── Registration ─────────────────────────────────────────────────────────
     private void RegisterPrefabs()
     {
         EnsureCoinPrefab();
+        EnsureLeverPrefab();
 
         if (NetworkManager.Singleton == null || NetworkManager.Singleton.NetworkConfig == null)
         {
@@ -127,6 +178,12 @@ public class DungeonBuilder : NetworkBehaviour
             !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(enemyPrefab))
         {
             NetworkManager.Singleton.AddNetworkPrefab(enemyPrefab);
+        }
+
+        if (leverPrefab != null &&
+            !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(leverPrefab))
+        {
+            NetworkManager.Singleton.AddNetworkPrefab(leverPrefab);
         }
     }
 
@@ -152,15 +209,26 @@ public class DungeonBuilder : NetworkBehaviour
     private void BuildDungeon()
     {
         dungeonRoot = new GameObject("Dungeon");
+        dungeonRooms.Clear();
 
         float dw = doorWidth;
 
         // ── MAIN HALL (16 × 16, centre 0,0,0) ───────────────────────────────
         //   north edge z=8, east edge x=8, west edge x=-8
-        Room(Vector3.zero, 16f, 16f, "MainHall",
+        DungeonRoom mainHall = Room(Vector3.zero, 16f, 16f, "MainHall",
             Door.N(dw),
             Door.E(dw),
             Door.W(dw));
+
+        // Modular room socket for interactive Security Lever
+        mainHall.AddSocket(
+            "MainHall_NorthLever",
+            SocketType.WallMount,
+            new Vector3(3.0f, 1.4f, 7.85f),
+            Quaternion.Euler(0f, 180f, 0f),
+            leverPrefab,
+            "MainHall_NorthGate"
+        );
 
         playerSpawnPoints.Add(new Vector3(-3f, 1f, -3f));
         playerSpawnPoints.Add(new Vector3( 3f, 1f, -3f));
@@ -240,27 +308,58 @@ public class DungeonBuilder : NetworkBehaviour
 
     private struct Door
     {
-        public enum Side { N, S, E, W }
+        public enum Side
+        {
+            N,
+            S,
+            E,
+            W
+        }
+
         public Side  side;
         public float width;
         public float offset; // shift along wall (0 = centred)
 
-        private Door(Side s, float w, float o) { side = s; width = w; offset = o; }
+        private Door(Side s, float w, float o)
+        {
+            side = s;
+            width = w;
+            offset = o;
+        }
 
-        public static Door N(float w, float o = 0f) { return new Door(Side.N, w, o); }
-        public static Door S(float w, float o = 0f) { return new Door(Side.S, w, o); }
-        public static Door E(float w, float o = 0f) { return new Door(Side.E, w, o); }
-        public static Door W(float w, float o = 0f) { return new Door(Side.W, w, o); }
+        public static Door N(float w, float o = 0f)
+        {
+            return new Door(Side.N, w, o);
+        }
+
+        public static Door S(float w, float o = 0f)
+        {
+            return new Door(Side.S, w, o);
+        }
+
+        public static Door E(float w, float o = 0f)
+        {
+            return new Door(Side.E, w, o);
+        }
+
+        public static Door W(float w, float o = 0f)
+        {
+            return new Door(Side.W, w, o);
+        }
     }
 
     // ── Room construction ────────────────────────────────────────────────────
 
-    private void Room(Vector3 centre, float width, float depth,
-                      string label, params Door[] doors)
+    private DungeonRoom Room(Vector3 centre, float width, float depth,
+                             string label, params Door[] doors)
     {
         GameObject go = new GameObject(label);
         go.transform.parent   = dungeonRoot.transform;
         go.transform.position = centre;
+
+        DungeonRoom room = go.AddComponent<DungeonRoom>();
+        room.Configure(label, label, new Vector3(width, wallHeight, depth));
+        dungeonRooms.Add(room);
 
         // Floor
         Prim(go.transform, "Floor",
@@ -279,6 +378,8 @@ public class DungeonBuilder : NetworkBehaviour
         BuildWall(go.transform, Door.Side.S, width, depth, doors);
         BuildWall(go.transform, Door.Side.E, width, depth, doors);
         BuildWall(go.transform, Door.Side.W, width, depth, doors);
+
+        return room;
     }
 
     private void BuildWall(Transform parent, Door.Side side,
@@ -384,7 +485,10 @@ public class DungeonBuilder : NetworkBehaviour
 
     private void Coins(params Vector3[] points)
     {
-        foreach (Vector3 p in points) { coinSpawnPoints.Add(p); }
+        foreach (Vector3 p in points)
+        {
+            coinSpawnPoints.Add(p);
+        }
     }
 
     // ── Entity spawning ──────────────────────────────────────────────────────
@@ -442,6 +546,17 @@ public class DungeonBuilder : NetworkBehaviour
             }
 
             spawnedEnemies.Add(e);
+        }
+    }
+
+    private void SpawnModularFeatures()
+    {
+        for (int i = 0; i < dungeonRooms.Count; i++)
+        {
+            if (dungeonRooms[i] != null)
+            {
+                dungeonRooms[i].SpawnRoomFeatures(IsServer);
+            }
         }
     }
 
@@ -521,7 +636,16 @@ public class DungeonBuilder : NetworkBehaviour
         }
         spawnedEnemies.Clear();
 
+        for (int i = 0; i < dungeonRooms.Count; i++)
+        {
+            if (dungeonRooms[i] != null)
+            {
+                dungeonRooms[i].ResetRoomFeatures(IsServer);
+            }
+        }
+
         SpawnCoins();
         SpawnEnemies();
+        SpawnModularFeatures();
     }
 }

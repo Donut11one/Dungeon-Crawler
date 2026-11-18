@@ -2,33 +2,37 @@ using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
-/// Networked coin collectible. Players walk into the trigger to collect it.
-/// Awards money server-authoritatively and despawns on collection.
-/// Design pillars: Clippable (players can knock each other into coins),
-/// Emergent (money feeds extraction pressure), Ragdoll-agnostic.
+/// Networked coin collectible.
+/// Inherits from WorldPickup: players aim directly at the coin and press [E] to collect it.
+/// Adds currency directly into the player's run wallet / bank and despawns.
 /// </summary>
-[RequireComponent(typeof(SphereCollider))]
-public class Coin : NetworkBehaviour
+public class Coin : WorldPickup
 {
-    [Header("Value")]
+    [Header("Coin Value")]
     [SerializeField] private int coinValue = 10;
 
-    [Header("Visual")]
+    [Header("Visual Animation")]
     [SerializeField] private float bobHeight = 0.15f;
     [SerializeField] private float bobSpeed = 2f;
     [SerializeField] private float spinSpeed = 90f;
 
-    public NetworkVariable<bool> IsCollected = new NetworkVariable<bool>(
-        false,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    /// <summary>Backwards compatibility accessor for focused coin.</summary>
+    public static Coin FocusedCoin
+    {
+        get
+        {
+            return FocusedPickup as Coin;
+        }
+    }
 
     private Vector3 startPosition;
     private float bobOffset;
 
     private void Awake()
     {
+        startPosition = transform.position;
+        bobOffset = Random.Range(0f, Mathf.PI * 2f);
+
         SphereCollider col = GetComponent<SphereCollider>();
         if (col == null)
         {
@@ -46,82 +50,55 @@ public class Coin : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        base.OnNetworkSpawn();
         startPosition = transform.position;
-        // Stagger the bob phase so coins don't all move in sync
         bobOffset = Random.Range(0f, Mathf.PI * 2f);
-
-        IsCollected.OnValueChanged += OnCollectedChanged;
     }
 
-    public override void OnNetworkDespawn()
+    protected override void Update()
     {
-        IsCollected.OnValueChanged -= OnCollectedChanged;
-    }
+        base.Update();
 
-    private void Update()
-    {
         if (IsCollected.Value)
         {
             return;
         }
 
-        // Visual bob and spin (local only — purely cosmetic)
+        // Visual bob and spin
         float y = startPosition.y + Mathf.Sin(Time.time * bobSpeed + bobOffset) * bobHeight;
         transform.position = new Vector3(startPosition.x, y, startPosition.z);
         transform.Rotate(Vector3.up, spinSpeed * Time.deltaTime, Space.World);
     }
 
-    private void OnTriggerEnter(Collider other)
+    public override string GetPromptText(GameObject localPlayer)
     {
-        if (!IsServer)
-        {
-            return;
-        }
-
-        if (IsCollected.Value)
-        {
-            return;
-        }
-
-        // Only players can collect coins
-        PlayerHealth playerHealth = other.GetComponentInParent<PlayerHealth>();
-        if (playerHealth == null)
-        {
-            return;
-        }
-
-        if (playerHealth.IsDead.Value)
-        {
-            return;
-        }
-
-        // Find the PlayerWallet on the same object
-        PlayerWallet wallet = other.GetComponentInParent<PlayerWallet>();
-        if (wallet == null)
-        {
-            return;
-        }
-
-        IsCollected.Value = true;
-        wallet.AddMoney(coinValue);
-
-        if (NetworkObject != null && NetworkObject.IsSpawned)
-        {
-            NetworkObject.Despawn(true);
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
+        return $"[E] PICK UP COIN (+${coinValue})";
     }
 
-    private void OnCollectedChanged(bool oldValue, bool newValue)
+    public override string GetFloatingTagText()
     {
-        if (newValue)
+        return $"+${coinValue}";
+    }
+
+    public override Color GetAccentColor()
+    {
+        return new Color(1f, 0.85f, 0.2f);
+    }
+
+    public override bool CanPickup(GameObject localPlayer)
+    {
+        return true;
+    }
+
+    protected override void OnPickupServer(ulong collectorClientId, GameObject playerObject)
+    {
+        PlayerWallet wallet = playerObject.GetComponent<PlayerWallet>();
+        if (wallet != null)
         {
-            // Hide immediately on all clients
-            gameObject.SetActive(false);
+            wallet.AddMoney(coinValue);
         }
+
+        CompletePickup();
     }
 
     public int GetValue()

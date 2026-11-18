@@ -18,6 +18,7 @@ public class GrabThrow : NetworkBehaviour
     private GrabbableObject heldObject;
     private Camera playerCamera;
     private RagdollController ragdollController;
+    private PlayerController playerController;
     private Collider playerCollider;
 
     /// <summary>The position where held items float in front of the player.</summary>
@@ -42,6 +43,7 @@ public class GrabThrow : NetworkBehaviour
     {
         playerCamera = GetComponentInChildren<Camera>();
         ragdollController = GetComponent<RagdollController>();
+        playerController = GetComponent<PlayerController>();
         playerCollider = GetComponent<Collider>();
     }
 
@@ -49,6 +51,16 @@ public class GrabThrow : NetworkBehaviour
     {
         if (!IsOwner)
         {
+            return;
+        }
+
+        // Can't interact when control is removed (extracted, timed out, or dead)
+        if (playerController != null && !playerController.CanControl)
+        {
+            if (heldObject != null)
+            {
+                ForceDrop();
+            }
             return;
         }
 
@@ -87,6 +99,12 @@ public class GrabThrow : NetworkBehaviour
         {
             if (heldObject == null)
             {
+                // Prioritize picking up focused pickup (coin, weapon, item, scrap) or pulling a lever if within interaction range
+                if (WorldPickup.FocusedPickup != null || DungeonLever.FocusedLever != null)
+                {
+                    return;
+                }
+
                 TryGrab();
             }
             else

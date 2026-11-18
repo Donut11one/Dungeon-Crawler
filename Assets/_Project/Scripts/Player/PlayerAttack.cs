@@ -46,6 +46,7 @@ public class PlayerAttack : NetworkBehaviour
     private PlayerInventory inventory;
     private RagdollController ragdollController;
     private GrabThrow grabThrow;
+    private PlayerController playerController;
     private Camera playerCamera;
     private Renderer bodyRenderer;
     private MaterialPropertyBlock propBlock;
@@ -107,6 +108,7 @@ public class PlayerAttack : NetworkBehaviour
         inventory = GetComponent<PlayerInventory>();
         ragdollController = GetComponent<RagdollController>();
         grabThrow = GetComponent<GrabThrow>();
+        playerController = GetComponent<PlayerController>();
         playerCamera = GetComponentInChildren<Camera>();
         bodyRenderer = FindBodyRenderer();
     }
@@ -139,6 +141,11 @@ public class PlayerAttack : NetworkBehaviour
     private void Update()
     {
         if (!IsOwner)
+        {
+            return;
+        }
+
+        if (playerController != null && !playerController.CanControl)
         {
             return;
         }

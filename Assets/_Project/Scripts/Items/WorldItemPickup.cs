@@ -3,14 +3,13 @@ using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
-/// Networked world item pickup.
-/// Spawns when items are dropped or found in the dungeon.
-/// Automatically renders as a rotating colored 3D marker based on ItemData.SlotColor.
-/// Collectible by walking over or pressing [E].
+/// Modular networked world item pickup for weapons, tools, consumables, and scrap.
+/// Inherits from WorldPickup: players aim directly at the item and press [E] to collect it.
+/// Adds the item into the player's inventory hotbar and despawns.
 /// </summary>
 [RequireComponent(typeof(NetworkObject))]
 [RequireComponent(typeof(SphereCollider))]
-public class WorldItemPickup : NetworkBehaviour
+public class WorldItemPickup : WorldPickup
 {
     public NetworkVariable<FixedString32Bytes> ItemId = new NetworkVariable<FixedString32Bytes>(
         default,
@@ -31,23 +30,27 @@ public class WorldItemPickup : NetworkBehaviour
     private void Awake()
     {
         col = GetComponent<SphereCollider>();
-        if (col != null)
+        if (col == null)
         {
-            col.isTrigger = true;
-            col.radius = 1.0f;
+            col = gameObject.AddComponent<SphereCollider>();
         }
+        col.isTrigger = true;
+        col.radius = 0.75f;
 
         spinPhase = Random.Range(0f, Mathf.PI * 2f);
     }
 
     public override void OnNetworkSpawn()
     {
+        base.OnNetworkSpawn();
+        ItemRegistry.Initialize();
         ItemId.OnValueChanged += OnItemIdChanged;
         SetupVisuals();
     }
 
     public override void OnNetworkDespawn()
     {
+        base.OnNetworkDespawn();
         ItemId.OnValueChanged -= OnItemIdChanged;
     }
 
@@ -63,65 +66,123 @@ public class WorldItemPickup : NetworkBehaviour
             Destroy(visualMesh);
         }
 
-        ItemData data = ItemRegistry.GetItem(ItemId.Value.ToString());
-        Color displayColor = data != null ? data.SlotColor : new Color(0.8f, 0.8f, 0.8f);
+        string idStr = ItemId.Value.ToString();
+        ItemData data = ItemRegistry.GetItem(idStr);
+        Color displayColor = data != null ? data.SlotColor : new Color(0.3f, 0.8f, 1f);
 
-        // Create rudimentary rotating cube mesh for the greybox item pickup
-        visualMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        visualMesh.name = "PickupVisual";
-        visualMesh.transform.parent = transform;
-        visualMesh.transform.localPosition = Vector3.zero;
-        visualMesh.transform.localScale = new Vector3(0.4f, 0.4f, 0.4f);
-
-        // Remove the default collider from the visual child
-        Collider childCol = visualMesh.GetComponent<Collider>();
-        if (childCol != null)
+        // Check if item has a custom world prefab, else construct a crisp visual marker
+        if (data != null && data.WorldPrefab != null)
         {
-            Destroy(childCol);
+            visualMesh = Instantiate(data.WorldPrefab, transform);
+            visualMesh.transform.localPosition = Vector3.zero;
+            visualMesh.transform.localRotation = Quaternion.identity;
         }
-
-        Renderer rend = visualMesh.GetComponent<Renderer>();
-        if (rend != null)
+        else
         {
-            rend.material = MaterialHelper.CreateLitMaterial(rend, displayColor);
+            // Rudimentary stylized cube mesh for the item pickup
+            visualMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            visualMesh.name = "PickupVisual";
+            visualMesh.transform.parent = transform;
+            visualMesh.transform.localPosition = Vector3.zero;
+            visualMesh.transform.localScale = new Vector3(0.35f, 0.35f, 0.35f);
+
+            Collider childCol = visualMesh.GetComponent<Collider>();
+            if (childCol != null)
+            {
+                Destroy(childCol);
+            }
+
+            Renderer rend = visualMesh.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                rend.material = MaterialHelper.CreateLitMaterial(rend, displayColor);
+            }
         }
     }
 
-    private void Update()
+    protected override void Update()
     {
-        // Gentle bob and spin animation
-        if (visualMesh != null)
-        {
-            float bob = Mathf.Sin(Time.time * 2.5f + spinPhase) * 0.1f;
-            visualMesh.transform.localPosition = new Vector3(0f, 0.25f + bob, 0f);
-            visualMesh.transform.Rotate(Vector3.up * (90f * Time.deltaTime));
-        }
-    }
+        base.Update();
 
-    private void OnTriggerEnter(Collider other)
-    {
-        if (!IsServer)
+        if (IsCollected.Value)
         {
             return;
         }
 
-        PlayerInventory inventory = other.GetComponentInParent<PlayerInventory>();
-        if (inventory != null)
+        // Gentle bob and spin animation
+        if (visualMesh != null)
         {
-            bool added = inventory.AddItem(ItemId.Value.ToString(), Count.Value);
-            if (added)
-            {
-                NetworkObject netObj = GetComponent<NetworkObject>();
-                if (netObj != null && netObj.IsSpawned)
-                {
-                    netObj.Despawn();
-                }
-            }
+            float bob = Mathf.Sin(Time.time * 2.5f + spinPhase) * 0.08f;
+            visualMesh.transform.localPosition = new Vector3(0f, 0.2f + bob, 0f);
+            visualMesh.transform.Rotate(Vector3.up * (90f * Time.deltaTime));
+        }
+    }
+
+    public override string GetPromptText(GameObject localPlayer)
+    {
+        string idStr = ItemId.Value.ToString();
+        ItemData data = ItemRegistry.GetItem(idStr);
+        string itemName = data != null ? data.DisplayName.ToUpper() : idStr.ToUpper();
+
+        if (!CanPickup(localPlayer))
+        {
+            return $"[INVENTORY FULL] - {itemName}";
+        }
+
+        int count = Count.Value;
+        return count > 1 ? $"[E] PICK UP {itemName} (x{count})" : $"[E] PICK UP {itemName}";
+    }
+
+    public override string GetFloatingTagText()
+    {
+        string idStr = ItemId.Value.ToString();
+        ItemData data = ItemRegistry.GetItem(idStr);
+        string itemName = data != null ? data.DisplayName : idStr;
+        int count = Count.Value;
+        return count > 1 ? $"{itemName} x{count}" : itemName;
+    }
+
+    public override Color GetAccentColor()
+    {
+        string idStr = ItemId.Value.ToString();
+        ItemData data = ItemRegistry.GetItem(idStr);
+        return data != null ? data.SlotColor : new Color(0.2f, 0.85f, 1f);
+    }
+
+    public override bool CanPickup(GameObject localPlayer)
+    {
+        if (localPlayer == null)
+        {
+            return false;
+        }
+
+        PlayerInventory inventory = localPlayer.GetComponent<PlayerInventory>();
+        if (inventory == null)
+        {
+            return false;
+        }
+
+        return inventory.CanAddItem(ItemId.Value.ToString(), Count.Value);
+    }
+
+    protected override void OnPickupServer(ulong collectorClientId, GameObject playerObject)
+    {
+        PlayerInventory inventory = playerObject.GetComponent<PlayerInventory>();
+        if (inventory == null)
+        {
+            return;
+        }
+
+        bool added = inventory.AddItem(ItemId.Value.ToString(), Count.Value);
+        if (added)
+        {
+            CompletePickup();
         }
     }
 
     /// <summary>
     /// Spawns a networked pickup item into the world with physics launch velocity.
+    /// Used when dropping items, breaking crates, or monster loot drops.
     /// </summary>
     public static GameObject SpawnPickup(string itemId, int count, Vector3 position, Vector3 velocity)
     {
@@ -130,12 +191,12 @@ public class WorldItemPickup : NetworkBehaviour
 
         NetworkObject netObj = obj.AddComponent<NetworkObject>();
         Rigidbody rb = obj.AddComponent<Rigidbody>();
-        rb.mass = 2f;
+        rb.mass = 1.5f;
         rb.linearDamping = 1f;
 
         SphereCollider sc = obj.AddComponent<SphereCollider>();
         sc.isTrigger = true;
-        sc.radius = 1.0f;
+        sc.radius = 0.75f;
 
         WorldItemPickup pickup = obj.AddComponent<WorldItemPickup>();
 

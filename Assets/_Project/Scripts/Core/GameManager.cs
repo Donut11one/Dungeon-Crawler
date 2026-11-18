@@ -27,6 +27,15 @@ public class GameManager : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    [Header("Round Flow")]
+    [SerializeField] private float autoReturnDelay = 5.0f;
+
+    public NetworkVariable<float> AutoReturnTimer = new NetworkVariable<float>(
+        0f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public enum GameState
     {
         Lobby,
@@ -109,26 +118,100 @@ public class GameManager : NetworkBehaviour
             if (RoundTimer.Value <= 0f)
             {
                 RoundTimer.Value = 0f;
-                CurrentState.Value = GameState.RoundOver;
-
-                // Timeout in dungeon: all unextracted contractors lose their inventory!
-                if (NetworkManager.Singleton != null)
+                TriggerRoundOver();
+            }
+        }
+        else if (CurrentState.Value == GameState.RoundOver)
+        {
+            if (AutoReturnTimer.Value > 0f)
+            {
+                AutoReturnTimer.Value -= Time.deltaTime;
+                if (AutoReturnTimer.Value <= 0f)
                 {
-                    foreach (NetworkClient nc in NetworkManager.Singleton.ConnectedClientsList)
+                    AutoReturnTimer.Value = 0f;
+                    ReturnToLobby();
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Transitions from Playing to RoundOver, drops failed contractors' carried loot,
+    /// and begins the countdown to automatically respawn all players in the bunker.
+    /// </summary>
+    public void TriggerRoundOver()
+    {
+        if (!IsServer || CurrentState.Value == GameState.RoundOver)
+        {
+            return;
+        }
+
+        CurrentState.Value = GameState.RoundOver;
+        AutoReturnTimer.Value = autoReturnDelay;
+
+        // Timeout / Round Over: contractors who failed to extract lose their inventory
+        if (NetworkManager.Singleton != null)
+        {
+            foreach (NetworkClient nc in NetworkManager.Singleton.ConnectedClientsList)
+            {
+                if (nc.PlayerObject != null && !extractedPlayers.Contains(nc.ClientId))
+                {
+                    PlayerInventory inv = nc.PlayerObject.GetComponent<PlayerInventory>();
+                    if (inv != null)
                     {
-                        if (nc.PlayerObject != null && !extractedPlayers.Contains(nc.ClientId))
-                        {
-                            PlayerInventory inv = nc.PlayerObject.GetComponent<PlayerInventory>();
-                            if (inv != null)
-                            {
-                                inv.ClearInventory();
-                            }
-                        }
+                        inv.ClearInventory();
                     }
                 }
-
-                OnRoundOverClientRpc();
             }
+        }
+
+        OnRoundOverClientRpc();
+    }
+
+    /// <summary>
+    /// Checks if all connected players have either extracted or died.
+    /// If yes, automatically ends the expedition and triggers the return countdown.
+    /// </summary>
+    public void CheckRoundEndConditions()
+    {
+        if (!IsServer || CurrentState.Value != GameState.Playing)
+        {
+            return;
+        }
+
+        if (NetworkManager.Singleton == null)
+        {
+            return;
+        }
+
+        int validPlayers = 0;
+        bool allFinished = true;
+
+        foreach (NetworkClient nc in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (nc.PlayerObject == null)
+            {
+                continue;
+            }
+
+            PlayerHealth ph = nc.PlayerObject.GetComponent<PlayerHealth>();
+            if (ph == null)
+            {
+                continue;
+            }
+
+            validPlayers++;
+            // Active if neither dead nor extracted
+            if (!ph.IsDead.Value && !extractedPlayers.Contains(nc.ClientId))
+            {
+                allFinished = false;
+                break;
+            }
+        }
+
+        if (validPlayers > 0 && allFinished)
+        {
+            TriggerRoundOver();
         }
     }
 
@@ -146,6 +229,7 @@ public class GameManager : NetworkBehaviour
 
         extractedPlayers.Clear();
         RoundTimer.Value = roundDuration;
+        AutoReturnTimer.Value = 0f;
 
         // Reset dungeon entities (coins, traps, enemies)
         DungeonBuilder dungeonBuilder = FindAnyObjectByType<DungeonBuilder>();
@@ -211,8 +295,8 @@ public class GameManager : NetworkBehaviour
 
     /// <summary>
     /// Server: Mark a player as extracted.
-    /// Banks their run earnings into their persistent savings (no free bonus),
-    /// and teleports them back safely to the Lobby Area!
+    /// Banks their run earnings into their persistent savings, removes control while waiting on the pad,
+    /// and triggers the round end check.
     /// </summary>
     public void ExtractPlayer(ulong clientId, int bonusAmount = 0)
     {
@@ -230,8 +314,7 @@ public class GameManager : NetworkBehaviour
 
         int bankedAmount = 0;
         int totalBank = 0;
-        NetworkClient client;
-        if (NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out client))
+        if (NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out NetworkClient client))
         {
             if (client.PlayerObject != null)
             {
@@ -242,17 +325,6 @@ public class GameManager : NetworkBehaviour
                     totalBank = wallet.BankedMoney.Value;
                 }
 
-                // Teleport the extracted player back to the Lobby Area!
-                Vector3 lobbySpawn = LobbyArea.Instance != null
-                    ? LobbyArea.Instance.GetLobbySpawnPoint((int)clientId)
-                    : new Vector3(0f, 1f, -80f);
-
-                PlayerHealth ph = client.PlayerObject.GetComponent<PlayerHealth>();
-                if (ph != null)
-                {
-                    ph.ResetPlayer(lobbySpawn);
-                }
-
                 PlayerController pc = client.PlayerObject.GetComponent<PlayerController>();
                 if (pc != null)
                 {
@@ -261,41 +333,62 @@ public class GameManager : NetworkBehaviour
             }
         }
 
-        Physics.SyncTransforms();
-
         // Notify all clients that this player escaped
         OnPlayerExtractedClientRpc(clientId, bankedAmount, totalBank);
 
-        // Check if all connected alive players have extracted
-        bool allExtracted = true;
-        int validPlayers = 0;
-        foreach (NetworkClient nc in NetworkManager.Singleton.ConnectedClientsList)
+        // Check if all players have now either extracted or died
+        CheckRoundEndConditions();
+    }
+
+    /// <summary>
+    /// Client-initiated RPC: Request extraction when standing on the pad and pressing [E].
+    /// Server validates distance and state before authorizing extraction.
+    /// </summary>
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestExtractionServerRpc(ulong requestingClientId)
+    {
+        if (!IsServer || CurrentState.Value != GameState.Playing)
         {
-            if (nc.PlayerObject == null)
-            {
-                continue;
-            }
+            return;
+        }
 
-            PlayerHealth ph = nc.PlayerObject.GetComponent<PlayerHealth>();
-            if (ph == null)
-            {
-                continue;
-            }
+        if (extractedPlayers.Contains(requestingClientId))
+        {
+            return;
+        }
 
-            validPlayers++;
-            if (!ph.IsDead.Value && !extractedPlayers.Contains(nc.ClientId))
+        if (!NetworkManager.Singleton.ConnectedClients.TryGetValue(requestingClientId, out NetworkClient client))
+        {
+            return;
+        }
+
+        if (client.PlayerObject == null)
+        {
+            return;
+        }
+
+        PlayerHealth ph = client.PlayerObject.GetComponent<PlayerHealth>();
+        if (ph != null && ph.IsDead.Value)
+        {
+            return;
+        }
+
+        RagdollController ragdoll = client.PlayerObject.GetComponent<RagdollController>();
+        if (ragdoll != null && ragdoll.IsRagdolled.Value)
+        {
+            return;
+        }
+
+        ExtractionPoint ep = FindAnyObjectByType<ExtractionPoint>();
+        if (ep != null)
+        {
+            if (!ep.IsPlayerOnPad(client.PlayerObject.gameObject))
             {
-                allExtracted = false;
-                break;
+                return;
             }
         }
 
-        if (validPlayers > 0 && allExtracted)
-        {
-            RoundTimer.Value = 0f;
-            CurrentState.Value = GameState.RoundOver;
-            OnAllExtractedClientRpc();
-        }
+        ExtractPlayer(requestingClientId);
     }
 
     /// <summary>
@@ -311,6 +404,7 @@ public class GameManager : NetworkBehaviour
         }
 
         RoundTimer.Value = 0f;
+        AutoReturnTimer.Value = 0f;
 
         DungeonBuilder dungeonBuilder = FindAnyObjectByType<DungeonBuilder>();
         if (dungeonBuilder != null)
@@ -392,6 +486,7 @@ public class GameManager : NetworkBehaviour
 
         extractedPlayers.Clear();
         RoundTimer.Value = roundDuration;
+        AutoReturnTimer.Value = 0f;
 
         DungeonBuilder dungeonBuilder = FindAnyObjectByType<DungeonBuilder>();
         if (dungeonBuilder != null)

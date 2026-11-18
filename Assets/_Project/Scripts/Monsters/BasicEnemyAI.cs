@@ -389,6 +389,12 @@ public class BasicEnemyAI : NetworkBehaviour
                 continue;
             }
 
+            // Skip extracted players
+            if (GameManager.Instance != null && GameManager.Instance.IsPlayerExtracted(client.ClientId))
+            {
+                continue;
+            }
+
             Transform playerT = client.PlayerObject.transform;
             float dist = Vector3.Distance(transform.position, playerT.position);
 

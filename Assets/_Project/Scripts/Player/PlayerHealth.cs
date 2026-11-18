@@ -82,10 +82,16 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
         if (IsDead.Value)
         {
-            respawnTimer -= Time.deltaTime;
-            if (respawnTimer <= 0f)
+            // Only auto-respawn if in the Lobby (for lobby ragdoll/PVP fun)
+            // In the dungeon, players stay dead until the expedition ends and the team returns to the bunker
+            bool inLobby = GameManager.Instance == null || GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby;
+            if (inLobby)
             {
-                Respawn();
+                respawnTimer -= Time.deltaTime;
+                if (respawnTimer <= 0f)
+                {
+                    Respawn();
+                }
             }
         }
     }
@@ -114,6 +120,12 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             return;
         }
         if (damageCooldownTimer > 0f)
+        {
+            return;
+        }
+
+        // Extracted players waiting safely cannot take damage
+        if (GameManager.Instance != null && GameManager.Instance.IsPlayerExtracted(OwnerClientId))
         {
             return;
         }
@@ -161,6 +173,12 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         if (ragdollController != null)
         {
             ragdollController.TriggerRagdoll(Vector3.up * 8f, respawnDelay - 0.5f);
+        }
+
+        // Notify GameManager to check if all players are now dead or extracted
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.CheckRoundEndConditions();
         }
     }
 

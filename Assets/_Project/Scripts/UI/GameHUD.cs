@@ -850,20 +850,6 @@ public class GameHUD : MonoBehaviour
                 }
             }
         }
-
-        // When round is over: Press L or Space to return squad to lobby
-        if (GameManager.Instance.CurrentState.Value == GameManager.GameState.RoundOver)
-        {
-            if (Keyboard.current != null)
-            {
-                if (Keyboard.current.lKey.wasPressedThisFrame ||
-                    Keyboard.current.rKey.wasPressedThisFrame ||
-                    Keyboard.current.spaceKey.wasPressedThisFrame)
-                {
-                    GameManager.Instance.ReturnToLobbyServerRpc();
-                }
-            }
-        }
     }
 
     private void DrawRoundState()
@@ -925,11 +911,17 @@ public class GameHUD : MonoBehaviour
                 }
             }
 
-            // Return to Bunker button (returns all contractors to lobby to ready up together)
-            if (GUI.Button(new Rect(Screen.width / 2f - 160f, Screen.height / 2f + 95f, 320f, 45f), "RETURN TO BUNKER (SPACE / L)"))
+            // Automatic countdown to respawn squad in bunker
+            float returnSecs = Mathf.Max(0f, GameManager.Instance.AutoReturnTimer.Value);
+            string autoReturnMsg = $"RETURNING TO BUNKER IN {returnSecs:F1}s...";
+            GUIStyle returnStyle = new GUIStyle(GUI.skin.label)
             {
-                GameManager.Instance.ReturnToLobbyServerRpc();
-            }
+                fontSize = 20,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+            returnStyle.normal.textColor = new Color(1f, 0.85f, 0.2f);
+            GUI.Label(new Rect(0f, Screen.height / 2f + 95f, Screen.width, 35f), autoReturnMsg, returnStyle);
         }
     }
 
@@ -960,7 +952,7 @@ public class GameHUD : MonoBehaviour
         int totalBank = wallet != null ? wallet.BankedMoney.Value : 0;
 
         Rect rect = new Rect(0f, Screen.height / 2f - 50f, Screen.width, 60f);
-        GUI.Label(rect, $"ESCAPED TO LOBBY!  \ud83d\udcb0  +${bankedAmount}", extractedBannerStyle);
+        GUI.Label(rect, $"ESCAPED! SAVINGS SECURED  \ud83d\udcb0  +${bankedAmount}", extractedBannerStyle);
 
         GUIStyle subStyle = new GUIStyle(GUI.skin.label)
         {
@@ -969,7 +961,7 @@ public class GameHUD : MonoBehaviour
         };
         subStyle.normal.textColor = Color.white;
         GUI.Label(new Rect(0f, Screen.height / 2f + 15f, Screen.width, 30f),
-            $"Total Money: ${totalBank}  |  Waiting in Bunker for squad...", subStyle);
+            $"Total Savings: ${totalBank}  |  STATUS: SAFE (Awaiting squad...)", subStyle);
     }
 
     /// <summary>
