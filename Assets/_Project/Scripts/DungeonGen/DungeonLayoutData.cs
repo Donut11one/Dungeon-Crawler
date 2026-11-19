@@ -98,11 +98,35 @@ public class EnemyPlacementData
 }
 
 [System.Serializable]
+public class PropPlacementData
+{
+    public string propName = "Prop";
+    public Vector3 localPosition = Vector3.zero;
+    public Vector3 localEulerAngles = Vector3.zero;
+    public Vector3 localScale = Vector3.one;
+    public Color color = new Color(0.35f, 0.32f, 0.30f);
+
+    public PropPlacementData()
+    {
+    }
+
+    public PropPlacementData(string name, Vector3 pos, Vector3 rot, Vector3 scale, Color col)
+    {
+        propName = name;
+        localPosition = pos;
+        localEulerAngles = rot;
+        localScale = scale;
+        color = col;
+    }
+}
+
+[System.Serializable]
 public class RoomLayoutData
 {
     public string roomId = "Room";
     public string roomLabel = "Room";
     public Vector3 position = Vector3.zero;
+    public Vector3 rotation = Vector3.zero;
     public Vector3 dimensions = new Vector3(10f, 4f, 10f);
 
     public Color floorColor = new Color(0.25f, 0.25f, 0.28f);
@@ -112,6 +136,7 @@ public class RoomLayoutData
     public List<DoorwayDefinition> doorways = new List<DoorwayDefinition>();
     public List<LeverPlacementData> levers = new List<LeverPlacementData>();
     public List<DoorPlacementData> doors = new List<DoorPlacementData>();
+    public List<PropPlacementData> props = new List<PropPlacementData>();
     public List<Vector3> coinSpawns = new List<Vector3>();
     public List<EnemyPlacementData> enemySpawns = new List<EnemyPlacementData>();
     public List<Vector3> playerSpawns = new List<Vector3>();
@@ -138,17 +163,23 @@ public class DungeonLayoutData : ScriptableObject
     [Header("Rooms")]
     public List<RoomLayoutData> rooms = new List<RoomLayoutData>();
 
-    public RoomLayoutData AddRoom(string id, string label, Vector3 pos, Vector3 dims)
+    public RoomLayoutData AddRoom(string id, string label, Vector3 pos, Vector3 rot, Vector3 dims)
     {
         RoomLayoutData r = new RoomLayoutData
         {
             roomId = id,
             roomLabel = label,
             position = pos,
+            rotation = rot,
             dimensions = dims
         };
         rooms.Add(r);
         return r;
+    }
+
+    public RoomLayoutData AddRoom(string id, string label, Vector3 pos, Vector3 dims)
+    {
+        return AddRoom(id, label, pos, Vector3.zero, dims);
     }
 
     public bool RemoveRoom(string id)

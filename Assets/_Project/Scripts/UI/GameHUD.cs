@@ -868,13 +868,84 @@ public class GameHUD : MonoBehaviour
 
             bool anyoneEscaped = extractedThisRound.Count > 0;
 
+            // Count connected active players
+            int activePlayerCount = 0;
+            if (NetworkManager.Singleton != null)
+            {
+                foreach (NetworkClient client in NetworkManager.Singleton.ConnectedClientsList)
+                {
+                    if (client.PlayerObject != null)
+                    {
+                        activePlayerCount++;
+                    }
+                }
+            }
+
+            // Dimensions for the scoreboard card
+            float cardWidth = 720f;
+            float rowHeight = 36f;
+            float headerSpace = 36f;
+            float cardHeight = Mathf.Max(90f, headerSpace + activePlayerCount * rowHeight + 14f);
+            float cardX = (Screen.width - cardWidth) * 0.5f;
+            float cardY = (Screen.height - cardHeight) * 0.5f - 10f;
+
             // Header
-            stateStyle.normal.textColor = anyoneEscaped ? new Color(0.2f, 1f, 0.2f) : Color.red;
-            Rect headerRect = new Rect(0f, Screen.height / 2f - 115f, Screen.width, 70f);
+            stateStyle.normal.textColor = anyoneEscaped ? new Color(0.2f, 1f, 0.3f) : new Color(1f, 0.25f, 0.25f);
+            Rect headerRect = new Rect(0f, cardY - 70f, Screen.width, 60f);
             GUI.Label(headerRect, anyoneEscaped ? "EXPEDITION COMPLETE!" : "TIME'S UP!", stateStyle);
 
+            // Card background & borders
+            DrawSolidRect(new Rect(cardX, cardY, cardWidth, cardHeight), new Color(0.04f, 0.06f, 0.10f, 0.92f));
+
+            Color accentColor = anyoneEscaped ? new Color(0.2f, 1f, 0.3f, 0.9f) : new Color(1f, 0.25f, 0.25f, 0.9f);
+            DrawSolidRect(new Rect(cardX, cardY, cardWidth, 3f), accentColor);
+            DrawSolidRect(new Rect(cardX, cardY + cardHeight - 1f, cardWidth, 1f), new Color(0.25f, 0.35f, 0.5f, 0.5f));
+            DrawSolidRect(new Rect(cardX, cardY, 1f, cardHeight), new Color(0.25f, 0.35f, 0.5f, 0.5f));
+            DrawSolidRect(new Rect(cardX + cardWidth - 1f, cardY, 1f, cardHeight), new Color(0.25f, 0.35f, 0.5f, 0.5f));
+
+            // Column Header labels
+            GUIStyle colHeadStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 13,
+                fontStyle = FontStyle.Bold
+            };
+            colHeadStyle.normal.textColor = new Color(0.6f, 0.7f, 0.85f, 0.8f);
+
+            colHeadStyle.alignment = TextAnchor.MiddleLeft;
+            GUI.Label(new Rect(cardX + 24f, cardY + 8f, 220f, 22f), "CONTRACTOR", colHeadStyle);
+
+            colHeadStyle.alignment = TextAnchor.MiddleCenter;
+            GUI.Label(new Rect(cardX + 244f, cardY + 8f, 240f, 22f), "EXPEDITION RESULT", colHeadStyle);
+
+            colHeadStyle.alignment = TextAnchor.MiddleRight;
+            GUI.Label(new Rect(cardX + 484f, cardY + 8f, 212f, 22f), "BANK SAVINGS", colHeadStyle);
+
+            DrawSolidRect(new Rect(cardX + 16f, cardY + 32f, cardWidth - 32f, 1f), new Color(0.2f, 0.28f, 0.4f, 0.5f));
+
+            // Row styles
+            GUIStyle leftStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 16,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft
+            };
+
+            GUIStyle centerStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 16,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+
+            GUIStyle rightStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 16,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleRight
+            };
+
             // Per-player results
-            float startY = Screen.height / 2f - 35f;
+            float startY = cardY + headerSpace + 6f;
             int i = 0;
             if (NetworkManager.Singleton != null)
             {
@@ -887,26 +958,42 @@ public class GameHUD : MonoBehaviour
 
                     ulong cid = client.ClientId;
                     bool escaped = extractedThisRound.ContainsKey(cid);
+                    bool isLocal = cid == NetworkManager.Singleton.LocalClientId;
 
                     PlayerWallet wallet = client.PlayerObject.GetComponent<PlayerWallet>();
                     int bank = wallet != null ? wallet.BankedMoney.Value : 0;
 
-                    string label = cid == NetworkManager.Singleton.LocalClientId ? " (You)" : "";
-                    string status = escaped ? "ESCAPED" : "CAPTURED";
-                    Color statusColor = escaped ? new Color(0.2f, 1f, 0.2f) : Color.red;
+                    float rowY = startY + i * rowHeight;
 
-                    scoreBoardStyle.normal.textColor = statusColor;
-                    Rect row = new Rect(Screen.width / 2f - 210f, startY + i * 32f, 420f, 28f);
+                    // Highlight row for local player
+                    if (isLocal)
+                    {
+                        DrawSolidRect(new Rect(cardX + 8f, rowY, cardWidth - 16f, rowHeight - 4f), new Color(0.2f, 0.5f, 1f, 0.12f));
+                    }
+                    else if (i % 2 == 1)
+                    {
+                        DrawSolidRect(new Rect(cardX + 8f, rowY, cardWidth - 16f, rowHeight - 4f), new Color(1f, 1f, 1f, 0.03f));
+                    }
+
+                    string playerName = isLocal ? $"Player {cid + 1} (You)" : $"Player {cid + 1}";
+                    leftStyle.normal.textColor = isLocal ? new Color(0.4f, 0.85f, 1f) : Color.white;
+                    GUI.Label(new Rect(cardX + 24f, rowY, 220f, rowHeight - 4f), playerName, leftStyle);
 
                     if (escaped)
                     {
                         int bankedThisRun = extractedThisRound[cid].bankedAmount;
-                        GUI.Label(row, $"Player {cid + 1}{label}: {status} (+${bankedThisRun})  |  Total: ${bank}", scoreBoardStyle);
+                        centerStyle.normal.textColor = new Color(0.2f, 1f, 0.3f);
+                        GUI.Label(new Rect(cardX + 244f, rowY, 240f, rowHeight - 4f), $"ESCAPED (+${bankedThisRun})", centerStyle);
                     }
                     else
                     {
-                        GUI.Label(row, $"Player {cid + 1}{label}: {status} ($0)  |  Total: ${bank}", scoreBoardStyle);
+                        centerStyle.normal.textColor = new Color(1f, 0.3f, 0.3f);
+                        GUI.Label(new Rect(cardX + 244f, rowY, 240f, rowHeight - 4f), "CAPTURED ($0)", centerStyle);
                     }
+
+                    rightStyle.normal.textColor = new Color(1f, 0.85f, 0.2f);
+                    GUI.Label(new Rect(cardX + 484f, rowY, 212f, rowHeight - 4f), $"Total: ${bank}", rightStyle);
+
                     i++;
                 }
             }
@@ -921,7 +1008,7 @@ public class GameHUD : MonoBehaviour
                 alignment = TextAnchor.MiddleCenter
             };
             returnStyle.normal.textColor = new Color(1f, 0.85f, 0.2f);
-            GUI.Label(new Rect(0f, Screen.height / 2f + 95f, Screen.width, 35f), autoReturnMsg, returnStyle);
+            GUI.Label(new Rect(0f, cardY + cardHeight + 18f, Screen.width, 35f), autoReturnMsg, returnStyle);
         }
     }
 

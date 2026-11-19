@@ -198,7 +198,7 @@ public class DungeonRoom : MonoBehaviour
     {
         GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
         cube.name = wallName;
-        cube.transform.parent = transform;
+        cube.transform.SetParent(transform, false);
         cube.transform.localPosition = localPos;
         cube.transform.localRotation = Quaternion.identity;
         cube.transform.localScale = localScale;

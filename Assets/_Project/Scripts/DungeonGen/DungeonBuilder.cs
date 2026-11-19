@@ -186,7 +186,11 @@ public class DungeonBuilder : NetworkBehaviour
                 return null;
 
             case DungeonMapSource.DesignedAsset:
-                return activeLayout;
+                if (activeLayout != null && activeLayout.rooms.Count > 0)
+                {
+                    return activeLayout;
+                }
+                return LoadDefaultLayoutAsset();
 
             case DungeonMapSource.RandomFromPool:
                 if (layoutPool != null && layoutPool.Count > 0)
@@ -202,8 +206,27 @@ public class DungeonBuilder : NetworkBehaviour
                 {
                     return activeLayout;
                 }
+                DungeonLayoutData fallback = LoadDefaultLayoutAsset();
+                if (fallback != null && fallback.rooms.Count > 0)
+                {
+                    return fallback;
+                }
                 return null;
         }
+    }
+
+    private DungeonLayoutData LoadDefaultLayoutAsset()
+    {
+#if UNITY_EDITOR
+        DungeonLayoutData asset = UnityEditor.AssetDatabase.LoadAssetAtPath<DungeonLayoutData>(
+            "Assets/_Project/ScriptableObjects/Dungeon/DefaultDungeonLayout.asset"
+        );
+        if (asset != null)
+        {
+            return asset;
+        }
+#endif
+        return null;
     }
 
     // ── Unity / NGO lifecycle ────────────────────────────────────────────────
@@ -212,6 +235,7 @@ public class DungeonBuilder : NetworkBehaviour
         EnsureCoinPrefab();
         EnsureLeverPrefab();
         EnsureDoorPrefab();
+        EnsureEnemyPrefab();
         RegisterPrefabs();
     }
 
@@ -359,12 +383,37 @@ public class DungeonBuilder : NetworkBehaviour
         }
     }
 
+    private void EnsureEnemyPrefab()
+    {
+        if (enemyPrefab != null)
+        {
+            return;
+        }
+
+#if UNITY_EDITOR
+        enemyPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Entities/EnemyPrefab.prefab");
+#endif
+
+        if (enemyPrefab == null && NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
+        {
+            foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
+            {
+                if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<EnemyHealth>() != null)
+                {
+                    enemyPrefab = netPrefab.Prefab;
+                    break;
+                }
+            }
+        }
+    }
+
     // ── Registration ─────────────────────────────────────────────────────────
     private void RegisterPrefabs()
     {
         EnsureCoinPrefab();
         EnsureLeverPrefab();
         EnsureDoorPrefab();
+        EnsureEnemyPrefab();
 
         if (NetworkManager.Singleton == null || NetworkManager.Singleton.NetworkConfig == null)
         {
@@ -461,7 +510,7 @@ public class DungeonBuilder : NetworkBehaviour
             RoomLayoutData roomData = layout.rooms[r];
             float h = roomData.dimensions.y > 0f ? roomData.dimensions.y : defaultH;
 
-            // Convert doorway definitions
+            // Convert doorway definitions for wall cutouts
             List<Door> doors = new List<Door>();
             for (int d = 0; d < roomData.doorways.Count; d++)
             {
@@ -473,11 +522,14 @@ public class DungeonBuilder : NetworkBehaviour
                     WallSide.East => Door.Side.E,
                     _ => Door.Side.W
                 };
-                doors.Add(new Door(s, def.width, def.offset, def.hasDoor, def.doorChannel, def.doorStartsOpen));
+                // Avoid duplicating doors if roomData.doors explicitly contains authored doors
+                bool spawnDoorwayDoor = def.hasDoor && (roomData.doors == null || roomData.doors.Count == 0);
+                doors.Add(new Door(s, def.width, def.offset, spawnDoorwayDoor, def.doorChannel, def.doorStartsOpen));
             }
 
             DungeonRoom room = Room(
                 roomData.position,
+                roomData.rotation,
                 roomData.dimensions.x,
                 roomData.dimensions.z,
                 roomData.roomLabel,
@@ -486,6 +538,8 @@ public class DungeonBuilder : NetworkBehaviour
                 roomData.ceilingColor,
                 doors.ToArray()
             );
+
+            room.SetDoorways(roomData.doorways);
 
             // Sockets for levers
             for (int l = 0; l < roomData.levers.Count; l++)
@@ -515,29 +569,39 @@ public class DungeonBuilder : NetworkBehaviour
                 );
             }
 
-            // Coin spawns
-            for (int c = 0; c < roomData.coinSpawns.Count; c++)
+            // Props (pillars, obstacles, decorative cubes)
+            if (roomData.props != null)
             {
-                coinSpawnPoints.Add(roomData.position + roomData.coinSpawns[c]);
+                for (int pr = 0; pr < roomData.props.Count; pr++)
+                {
+                    PropPlacementData prop = roomData.props[pr];
+                    Prim(room.transform, prop.propName, prop.localPosition, prop.localScale, prop.color, prop.localEulerAngles);
+                }
             }
 
-            // Enemy spawns
+            // Coin spawns transformed by room transform
+            for (int c = 0; c < roomData.coinSpawns.Count; c++)
+            {
+                coinSpawnPoints.Add(room.transform.TransformPoint(roomData.coinSpawns[c]));
+            }
+
+            // Enemy spawns transformed by room transform
             for (int e = 0; e < roomData.enemySpawns.Count; e++)
             {
-                enemySpawnPoints.Add(roomData.position + roomData.enemySpawns[e].localPosition);
+                enemySpawnPoints.Add(room.transform.TransformPoint(roomData.enemySpawns[e].localPosition));
                 enemySpawnArchetypes.Add(roomData.enemySpawns[e].enemyId);
             }
 
-            // Player spawns
+            // Player spawns transformed by room transform
             for (int p = 0; p < roomData.playerSpawns.Count; p++)
             {
-                playerSpawnPoints.Add(roomData.position + roomData.playerSpawns[p]);
+                playerSpawnPoints.Add(room.transform.TransformPoint(roomData.playerSpawns[p]));
             }
 
-            // Extraction point
+            // Extraction point transformed by room transform
             if (roomData.hasExtractionPoint)
             {
-                Vector3 extPos = roomData.position + roomData.extractionLocalPosition;
+                Vector3 extPos = room.transform.TransformPoint(roomData.extractionLocalPosition);
                 CreateCustomExtractionPoint(extPos);
             }
         }
@@ -752,6 +816,7 @@ public class DungeonBuilder : NetworkBehaviour
     // ── Room construction ────────────────────────────────────────────────────
     private DungeonRoom Room(
         Vector3 centre,
+        Vector3 rotationEuler,
         float width,
         float depth,
         string label,
@@ -764,6 +829,7 @@ public class DungeonBuilder : NetworkBehaviour
         GameObject go = new GameObject(label);
         go.transform.parent = dungeonRoot.transform;
         go.transform.position = centre;
+        go.transform.rotation = Quaternion.Euler(rotationEuler);
 
         DungeonRoom room = go.AddComponent<DungeonRoom>();
         room.Configure(label, label, new Vector3(width, wallHeight, depth));
@@ -818,6 +884,20 @@ public class DungeonBuilder : NetworkBehaviour
         }
 
         return room;
+    }
+
+    private DungeonRoom Room(
+        Vector3 centre,
+        float width,
+        float depth,
+        string label,
+        Color floorCol,
+        Color wallCol,
+        Color ceilingCol,
+        params Door[] doors
+    )
+    {
+        return Room(centre, Vector3.zero, width, depth, label, floorCol, wallCol, ceilingCol, doors);
     }
 
     private void BuildWall(
@@ -894,12 +974,16 @@ public class DungeonBuilder : NetworkBehaviour
         }
     }
 
-    private void Prim(Transform parent, string label, Vector3 localPos, Vector3 scale, Color color)
+    private void Prim(Transform parent, string label, Vector3 localPos, Vector3 scale, Color color, Vector3? localEuler = null)
     {
         GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
         obj.name = label;
-        obj.transform.parent = parent;
+        if (parent != null)
+        {
+            obj.transform.SetParent(parent, false);
+        }
         obj.transform.localPosition = localPos;
+        obj.transform.localRotation = localEuler.HasValue ? Quaternion.Euler(localEuler.Value) : Quaternion.identity;
         obj.transform.localScale = scale;
         obj.isStatic = true;
 
@@ -921,13 +1005,18 @@ public class DungeonBuilder : NetworkBehaviour
     // ── Entity Spawning ──────────────────────────────────────────────────────
     private void SpawnCoins()
     {
+        EnsureCoinPrefab();
+
         if (coinPrefab == null)
         {
             Debug.LogError("[DungeonBuilder] No coin prefab assigned and could not find one!");
             return;
         }
 
-        int count = Mathf.Min(coinCount, coinSpawnPoints.Count);
+        DungeonLayoutData layout = currentResolvedLayout != null ? currentResolvedLayout : GetResolvedLayout();
+        bool isAuthored = layout != null && layout.rooms.Count > 0;
+        int count = isAuthored ? coinSpawnPoints.Count : Mathf.Min(coinCount, coinSpawnPoints.Count);
+
         for (int i = 0; i < count; i++)
         {
             GameObject c = Instantiate(coinPrefab, coinSpawnPoints[i], Quaternion.identity);
@@ -944,13 +1033,17 @@ public class DungeonBuilder : NetworkBehaviour
 
     private void SpawnEnemies()
     {
+        EnsureEnemyPrefab();
+
         if (enemyPrefab == null)
         {
             Debug.LogWarning("[DungeonBuilder] No enemy prefab assigned.");
             return;
         }
 
-        int count = Mathf.Min(enemyCount, enemySpawnPoints.Count);
+        DungeonLayoutData layout = currentResolvedLayout != null ? currentResolvedLayout : GetResolvedLayout();
+        bool isAuthored = layout != null && layout.rooms.Count > 0;
+        int count = isAuthored ? enemySpawnPoints.Count : Mathf.Min(enemyCount, enemySpawnPoints.Count);
         List<EnemyData> allEnemies = EnemyRegistry.GetAllEnemies();
 
         for (int i = 0; i < count; i++)
@@ -986,6 +1079,8 @@ public class DungeonBuilder : NetworkBehaviour
 
             spawnedEnemies.Add(e);
         }
+
+        Debug.Log($"[DungeonBuilder] Spawned {spawnedEnemies.Count} enemies across the dungeon.");
     }
 
     private void SpawnModularFeatures()
@@ -1019,12 +1114,13 @@ public class DungeonBuilder : NetworkBehaviour
 
         extractionPointObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         extractionPointObj.name = "ExtractionPoint";
-        extractionPointObj.transform.position = pos;
-        extractionPointObj.transform.localScale = new Vector3(3f, 0.1f, 3f);
         if (dungeonRoot != null)
         {
-            extractionPointObj.transform.parent = dungeonRoot.transform;
+            extractionPointObj.transform.SetParent(dungeonRoot.transform, false);
         }
+        extractionPointObj.transform.position = pos;
+        extractionPointObj.transform.localRotation = Quaternion.identity;
+        extractionPointObj.transform.localScale = new Vector3(3f, 0.1f, 3f);
 
         Renderer rend = extractionPointObj.GetComponent<Renderer>();
         if (rend != null)

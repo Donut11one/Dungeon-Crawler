@@ -462,6 +462,14 @@ public class DungeonMapBuilderTool : EditorWindow
         titleStyle.normal.textColor = Color.white;
         EditorGUILayout.LabelField("MAP BUILDER", titleStyle, GUILayout.Width(92f));
 
+        EnsureLayoutAssetTarget();
+        string activeMapName = targetLayoutAsset != null ? targetLayoutAsset.layoutName : "None";
+        GUIStyle mapLabelStyle = new GUIStyle(EditorStyles.miniBoldLabel)
+        {
+            normal = { textColor = new Color(0.4f, 1f, 0.7f) }
+        };
+        EditorGUILayout.LabelField($"[{activeMapName}]", mapLabelStyle, GUILayout.Width(140f));
+
         DrawSceneToolbarButton("Select", BuilderToolMode.Select);
         DrawSceneToolbarButton("Room", BuilderToolMode.Room);
         DrawSceneToolbarButton("Door", BuilderToolMode.Door);
@@ -749,6 +757,10 @@ public class DungeonMapBuilderTool : EditorWindow
 
         Quaternion rot = Quaternion.Euler(0f, placementRotationY, 0f);
 
+        DungeonRoom[] allRooms = FindObjectsByType<DungeonRoom>(FindObjectsInactive.Exclude);
+        DungeonRoom targetRoom = FindClosestRoom(pos, allRooms);
+        GameObject parentObj = targetRoom != null ? targetRoom.gameObject : dungeonRoot;
+
         switch (currentMode)
         {
             case BuilderToolMode.Room:
@@ -763,27 +775,27 @@ public class DungeonMapBuilderTool : EditorWindow
                     finalDoorPos = snappedDoorPos;
                     finalDoorRot = snappedDoorRot;
                 }
-                PlaceDoor(dungeonRoot, finalDoorPos, finalDoorRot);
+                PlaceDoor(parentObj, finalDoorPos, finalDoorRot);
                 break;
 
             case BuilderToolMode.Lever:
-                PlaceLever(dungeonRoot, pos, normal, rot);
+                PlaceLever(parentObj, pos, normal, rot);
                 break;
 
             case BuilderToolMode.Coin:
-                PlaceCoin(dungeonRoot, pos);
+                PlaceCoin(parentObj, pos);
                 break;
 
             case BuilderToolMode.Enemy:
-                PlaceEnemy(dungeonRoot, pos);
+                PlaceEnemy(parentObj, pos);
                 break;
 
             case BuilderToolMode.ExtractionPad:
-                PlaceExtractionPad(dungeonRoot, pos);
+                PlaceExtractionPad(parentObj, pos);
                 break;
 
             case BuilderToolMode.PlayerSpawn:
-                PlacePlayerSpawn(dungeonRoot, pos);
+                PlacePlayerSpawn(parentObj, pos);
                 break;
         }
     }
@@ -934,30 +946,32 @@ public class DungeonMapBuilderTool : EditorWindow
             defs.Add(new DoorwayDefinition(WallSide.West, doorWidth, 0f, false, ""));
         }
 
+        Quaternion roomRot = Quaternion.Euler(0f, placementRotationY, 0f);
+
         switch (roomPreset)
         {
             case ThematicRoomPreset.StartingHub_16x16:
-                PlacePlayerSpawn(roomObj, center + new Vector3(-3f, 0f, -3f));
-                PlacePlayerSpawn(roomObj, center + new Vector3(3f, 0f, -3f));
-                PlacePlayerSpawn(roomObj, center + new Vector3(0f, 0f, 3f));
+                PlacePlayerSpawn(roomObj, center + roomRot * new Vector3(-3f, 0f, -3f));
+                PlacePlayerSpawn(roomObj, center + roomRot * new Vector3(3f, 0f, -3f));
+                PlacePlayerSpawn(roomObj, center + roomRot * new Vector3(0f, 0f, 3f));
 
-                PlaceLever(roomObj, center + new Vector3(3.0f, 0f, 7.85f), Vector3.back, Quaternion.Euler(0f, 180f, 0f));
+                PlaceLever(roomObj, center + roomRot * new Vector3(3.0f, 0f, 7.85f), roomRot * Vector3.back, roomRot * Quaternion.Euler(0f, 180f, 0f));
 
                 if (cutDoorNorth)
                 {
-                    PlaceDoor(roomObj, center + new Vector3(0f, 0f, 8f), Quaternion.identity);
+                    PlaceDoor(roomObj, center + roomRot * new Vector3(0f, 0f, 8f), roomRot * Quaternion.identity);
                 }
 
-                PlaceCoin(roomObj, center + new Vector3(-5f, 0f, 5f));
-                PlaceCoin(roomObj, center + new Vector3(5f, 0f, 5f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(-5f, 0f, 5f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(5f, 0f, 5f));
                 break;
 
             case ThematicRoomPreset.ExtractionChamber_10x12:
                 PlaceExtractionPad(roomObj, center);
-                PlaceCoin(roomObj, center + new Vector3(-3f, 0f, 3f));
-                PlaceCoin(roomObj, center + new Vector3(3f, 0f, 3f));
-                PlaceCoin(roomObj, center + new Vector3(-3f, 0f, -3f));
-                PlaceCoin(roomObj, center + new Vector3(3f, 0f, -3f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(-3f, 0f, 3f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(3f, 0f, 3f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(-3f, 0f, -3f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(3f, 0f, -3f));
                 break;
 
             case ThematicRoomPreset.ContainmentCell_10x10:
@@ -966,13 +980,13 @@ public class DungeonMapBuilderTool : EditorWindow
 
                 if (cutDoorSouth)
                 {
-                    PlaceDoor(roomObj, center + new Vector3(0f, 0f, -5f), Quaternion.Euler(0f, 180f, 0f));
-                    PlaceLever(roomObj, center + new Vector3(2.5f, 0f, -5.15f), Vector3.back, Quaternion.Euler(0f, 180f, 0f));
+                    PlaceDoor(roomObj, center + roomRot * new Vector3(0f, 0f, -5f), roomRot * Quaternion.Euler(0f, 180f, 0f));
+                    PlaceLever(roomObj, center + roomRot * new Vector3(2.5f, 0f, -5.15f), roomRot * Vector3.forward, roomRot * Quaternion.identity);
                 }
 
                 PlaceEnemy(roomObj, center);
-                PlaceCoin(roomObj, center + new Vector3(-2f, 0f, 3f));
-                PlaceCoin(roomObj, center + new Vector3(2f, 0f, 3f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(-2f, 0f, 3f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(2f, 0f, 3f));
                 break;
 
             case ThematicRoomPreset.CoopPuzzleVault_12x10:
@@ -981,17 +995,17 @@ public class DungeonMapBuilderTool : EditorWindow
 
                 if (cutDoorNorth)
                 {
-                    PlaceDoor(roomObj, center + new Vector3(0f, 0f, 5f), Quaternion.identity);
+                    PlaceDoor(roomObj, center + roomRot * new Vector3(0f, 0f, 5f), roomRot * Quaternion.identity);
                 }
 
                 leverResetDelay = 4.0f;
-                PlaceLever(roomObj, center + new Vector3(-5.85f, 0f, 0f), Vector3.right, Quaternion.Euler(0f, 90f, 0f));
-                PlaceLever(roomObj, center + new Vector3(5.85f, 0f, 0f), Vector3.left, Quaternion.Euler(0f, -90f, 0f));
+                PlaceLever(roomObj, center + roomRot * new Vector3(-5.85f, 0f, 0f), roomRot * Vector3.right, roomRot * Quaternion.Euler(0f, 90f, 0f));
+                PlaceLever(roomObj, center + roomRot * new Vector3(5.85f, 0f, 0f), roomRot * Vector3.left, roomRot * Quaternion.Euler(0f, -90f, 0f));
                 leverResetDelay = 0f;
 
-                PlaceCoin(roomObj, center + new Vector3(0f, 0f, 1f));
-                PlaceCoin(roomObj, center + new Vector3(-1.5f, 0f, 2f));
-                PlaceCoin(roomObj, center + new Vector3(1.5f, 0f, 2f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(0f, 0f, 1f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(-1.5f, 0f, 2f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(1.5f, 0f, 2f));
                 break;
 
             case ThematicRoomPreset.StorageDepot_12x12:
@@ -1000,15 +1014,15 @@ public class DungeonMapBuilderTool : EditorWindow
                 CreatePrimitiveCube(roomObj.transform, "Pillar_3", new Vector3(-3.5f, 2f, -3.5f), new Vector3(0.8f, 4f, 0.8f), wallCol);
                 CreatePrimitiveCube(roomObj.transform, "Pillar_4", new Vector3(3.5f, 2f, -3.5f), new Vector3(0.8f, 4f, 0.8f), wallCol);
 
-                PlaceEnemy(roomObj, center + new Vector3(0f, 0f, 2f));
-                PlaceCoin(roomObj, center + new Vector3(-3.5f, 0f, 0f));
-                PlaceCoin(roomObj, center + new Vector3(3.5f, 0f, 0f));
-                PlaceCoin(roomObj, center + new Vector3(0f, 0f, -3f));
+                PlaceEnemy(roomObj, center + roomRot * new Vector3(0f, 0f, 2f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(-3.5f, 0f, 0f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(3.5f, 0f, 0f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(0f, 0f, -3f));
                 break;
 
             case ThematicRoomPreset.ConnectingCorridor_4x14:
-                PlaceCoin(roomObj, center + new Vector3(0f, 0f, -3f));
-                PlaceCoin(roomObj, center + new Vector3(0f, 0f, 3f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(0f, 0f, -3f));
+                PlaceCoin(roomObj, center + roomRot * new Vector3(0f, 0f, 3f));
                 break;
         }
 
@@ -1122,8 +1136,9 @@ public class DungeonMapBuilderTool : EditorWindow
     {
         GameObject pad = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         pad.name = "ExtractionPoint";
-        pad.transform.parent = parent.transform;
+        pad.transform.SetParent(parent.transform, false);
         pad.transform.position = new Vector3(pos.x, pos.y + 0.05f, pos.z);
+        pad.transform.localRotation = Quaternion.identity;
         pad.transform.localScale = new Vector3(3f, 0.1f, 3f);
 
         Renderer rend = pad.GetComponent<Renderer>();
@@ -1147,8 +1162,9 @@ public class DungeonMapBuilderTool : EditorWindow
     private void PlacePlayerSpawn(GameObject parent, Vector3 pos)
     {
         GameObject marker = new GameObject($"PlayerSpawn_{Random.Range(10, 99)}");
-        marker.transform.parent = parent.transform;
+        marker.transform.SetParent(parent.transform, false);
         marker.transform.position = new Vector3(pos.x, pos.y + 1f, pos.z);
+        marker.transform.localRotation = Quaternion.identity;
 
         Undo.RegisterCreatedObjectUndo(marker, "Place Player Spawn");
         Selection.activeGameObject = marker;
@@ -1208,7 +1224,7 @@ public class DungeonMapBuilderTool : EditorWindow
     {
         GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
         cube.name = name;
-        cube.transform.parent = parent;
+        cube.transform.SetParent(parent, false);
         cube.transform.localPosition = pos;
         cube.transform.localRotation = Quaternion.identity;
         cube.transform.localScale = scale;
@@ -1260,7 +1276,7 @@ public class DungeonMapBuilderTool : EditorWindow
         for (int r = 0; r < sceneRooms.Length; r++)
         {
             DungeonRoom sr = sceneRooms[r];
-            RoomLayoutData data = targetLayoutAsset.AddRoom(sr.RoomId, sr.RoomLabel, sr.transform.position, sr.Dimensions);
+            RoomLayoutData data = targetLayoutAsset.AddRoom(sr.RoomId, sr.RoomLabel, sr.transform.position, sr.transform.eulerAngles, sr.Dimensions);
 
             if (sr.Doorways != null)
             {
@@ -1277,7 +1293,7 @@ public class DungeonMapBuilderTool : EditorWindow
         RoomLayoutData fallbackRoom = null;
         if (sceneRooms.Length == 0)
         {
-            fallbackRoom = targetLayoutAsset.AddRoom("MainArea", "Main Facility Area", Vector3.zero, new Vector3(40f, wallHeight, 40f));
+            fallbackRoom = targetLayoutAsset.AddRoom("MainArea", "Main Facility Area", Vector3.zero, Vector3.zero, new Vector3(40f, wallHeight, 40f));
         }
 
         // 1. Scan and save all Blast Doors in the scene
@@ -1285,11 +1301,11 @@ public class DungeonMapBuilderTool : EditorWindow
         for (int d = 0; d < doors.Length; d++)
         {
             DungeonDoor door = doors[d];
-            DungeonRoom hostRoom = FindClosestRoom(door.transform.position, sceneRooms);
+            DungeonRoom hostRoom = door.GetComponentInParent<DungeonRoom>() ?? FindClosestRoom(door.transform.position, sceneRooms);
             RoomLayoutData rData = hostRoom != null ? roomDataMap[hostRoom] : fallbackRoom;
 
-            Vector3 localPos = hostRoom != null ? door.transform.position - hostRoom.transform.position : door.transform.position;
-            Vector3 localEuler = hostRoom != null ? (door.transform.eulerAngles - hostRoom.transform.eulerAngles) : door.transform.eulerAngles;
+            Vector3 localPos = hostRoom != null ? hostRoom.transform.InverseTransformPoint(door.transform.position) : door.transform.position;
+            Vector3 localEuler = hostRoom != null ? (Quaternion.Inverse(hostRoom.transform.rotation) * door.transform.rotation).eulerAngles : door.transform.eulerAngles;
 
             rData.doors.Add(new DoorPlacementData(
                 door.DoorName,
@@ -1305,11 +1321,11 @@ public class DungeonMapBuilderTool : EditorWindow
         for (int l = 0; l < levers.Length; l++)
         {
             DungeonLever lever = levers[l];
-            DungeonRoom hostRoom = FindClosestRoom(lever.transform.position, sceneRooms);
+            DungeonRoom hostRoom = lever.GetComponentInParent<DungeonRoom>() ?? FindClosestRoom(lever.transform.position, sceneRooms);
             RoomLayoutData rData = hostRoom != null ? roomDataMap[hostRoom] : fallbackRoom;
 
-            Vector3 localPos = hostRoom != null ? lever.transform.position - hostRoom.transform.position : lever.transform.position;
-            Vector3 localEuler = hostRoom != null ? (lever.transform.eulerAngles - hostRoom.transform.eulerAngles) : lever.transform.eulerAngles;
+            Vector3 localPos = hostRoom != null ? hostRoom.transform.InverseTransformPoint(lever.transform.position) : lever.transform.position;
+            Vector3 localEuler = hostRoom != null ? (Quaternion.Inverse(hostRoom.transform.rotation) * lever.transform.rotation).eulerAngles : lever.transform.eulerAngles;
 
             rData.levers.Add(new LeverPlacementData(
                 lever.name,
@@ -1325,10 +1341,10 @@ public class DungeonMapBuilderTool : EditorWindow
         for (int c = 0; c < coins.Length; c++)
         {
             Coin coin = coins[c];
-            DungeonRoom hostRoom = FindClosestRoom(coin.transform.position, sceneRooms);
+            DungeonRoom hostRoom = coin.GetComponentInParent<DungeonRoom>() ?? FindClosestRoom(coin.transform.position, sceneRooms);
             RoomLayoutData rData = hostRoom != null ? roomDataMap[hostRoom] : fallbackRoom;
 
-            Vector3 localPos = hostRoom != null ? coin.transform.position - hostRoom.transform.position : coin.transform.position;
+            Vector3 localPos = hostRoom != null ? hostRoom.transform.InverseTransformPoint(coin.transform.position) : coin.transform.position;
             rData.coinSpawns.Add(localPos);
         }
 
@@ -1337,10 +1353,10 @@ public class DungeonMapBuilderTool : EditorWindow
         for (int e = 0; e < enemies.Length; e++)
         {
             EnemyHealth enemy = enemies[e];
-            DungeonRoom hostRoom = FindClosestRoom(enemy.transform.position, sceneRooms);
+            DungeonRoom hostRoom = enemy.GetComponentInParent<DungeonRoom>() ?? FindClosestRoom(enemy.transform.position, sceneRooms);
             RoomLayoutData rData = hostRoom != null ? roomDataMap[hostRoom] : fallbackRoom;
 
-            Vector3 localPos = hostRoom != null ? enemy.transform.position - hostRoom.transform.position : enemy.transform.position;
+            Vector3 localPos = hostRoom != null ? hostRoom.transform.InverseTransformPoint(enemy.transform.position) : enemy.transform.position;
             string id = enemy.gameObject.name.Replace("Enemy_", "").Replace("(Clone)", "").Trim();
 
             rData.enemySpawns.Add(new EnemyPlacementData(localPos, id));
@@ -1351,11 +1367,11 @@ public class DungeonMapBuilderTool : EditorWindow
         if (pads.Length > 0)
         {
             ExtractionPoint ep = pads[0];
-            DungeonRoom hostRoom = FindClosestRoom(ep.transform.position, sceneRooms);
+            DungeonRoom hostRoom = ep.GetComponentInParent<DungeonRoom>() ?? FindClosestRoom(ep.transform.position, sceneRooms);
             RoomLayoutData rData = hostRoom != null ? roomDataMap[hostRoom] : fallbackRoom;
 
             rData.hasExtractionPoint = true;
-            rData.extractionLocalPosition = hostRoom != null ? ep.transform.position - hostRoom.transform.position : ep.transform.position;
+            rData.extractionLocalPosition = hostRoom != null ? hostRoom.transform.InverseTransformPoint(ep.transform.position) : ep.transform.position;
         }
 
         // 6. Scan and save Player Spawns
@@ -1364,10 +1380,54 @@ public class DungeonMapBuilderTool : EditorWindow
         {
             if (sceneObjects[i].name.StartsWith("PlayerSpawn"))
             {
-                DungeonRoom hostRoom = FindClosestRoom(sceneObjects[i].transform.position, sceneRooms);
+                DungeonRoom hostRoom = sceneObjects[i].GetComponentInParent<DungeonRoom>() ?? FindClosestRoom(sceneObjects[i].transform.position, sceneRooms);
                 RoomLayoutData rData = hostRoom != null ? roomDataMap[hostRoom] : fallbackRoom;
-                Vector3 localPos = hostRoom != null ? sceneObjects[i].transform.position - hostRoom.transform.position : sceneObjects[i].transform.position;
+                Vector3 localPos = hostRoom != null ? hostRoom.transform.InverseTransformPoint(sceneObjects[i].transform.position) : sceneObjects[i].transform.position;
                 rData.playerSpawns.Add(localPos);
+            }
+        }
+
+        // 7. Scan and save room props / pillars / custom geometry
+        for (int r = 0; r < sceneRooms.Length; r++)
+        {
+            DungeonRoom sr = sceneRooms[r];
+            RoomLayoutData rData = roomDataMap[sr];
+
+            for (int i = 0; i < sr.transform.childCount; i++)
+            {
+                Transform child = sr.transform.GetChild(i);
+                string cName = child.name;
+
+                if (cName == "Floor" || cName == "Ceiling" || cName.StartsWith("Wall") ||
+                    cName.StartsWith("Socket_") || cName.StartsWith("BlastDoor") ||
+                    cName.StartsWith("Lever") || cName.StartsWith("Coin") ||
+                    cName.StartsWith("Enemy") || cName.StartsWith("PlayerSpawn") ||
+                    cName == "ExtractionPoint")
+                {
+                    continue;
+                }
+
+                if (child.GetComponent<DungeonDoor>() != null || child.GetComponent<DungeonLever>() != null ||
+                    child.GetComponent<Coin>() != null || child.GetComponent<EnemyHealth>() != null ||
+                    child.GetComponent<ExtractionPoint>() != null)
+                {
+                    continue;
+                }
+
+                Color col = rData.wallColor;
+                Renderer rend = child.GetComponent<Renderer>();
+                if (rend != null && rend.sharedMaterial != null)
+                {
+                    col = rend.sharedMaterial.color;
+                }
+
+                rData.props.Add(new PropPlacementData(
+                    child.name,
+                    child.localPosition,
+                    child.localEulerAngles,
+                    child.localScale,
+                    col
+                ));
             }
         }
 
@@ -1383,8 +1443,9 @@ public class DungeonMapBuilderTool : EditorWindow
         EditorUtility.SetDirty(targetLayoutAsset);
         AssetDatabase.SaveAssets();
 
-        // Mark active scene dirty so changes persist on Ctrl+S
+        // Mark active scene dirty and persist scene so changes persist into Play Mode
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        EditorSceneManager.SaveOpenScenes();
 
         // Notifications
         if (SceneView.lastActiveSceneView != null)
@@ -1514,9 +1575,10 @@ public class DungeonMapBuilderTool : EditorWindow
             return null;
         }
 
-        DungeonRoom closest = null;
-        float minDistSq = float.MaxValue;
+        DungeonRoom bestRoom = null;
+        float bestDistSq = float.MaxValue;
 
+        // 1. Check if position is strictly inside any room's exact bounds
         for (int i = 0; i < rooms.Length; i++)
         {
             DungeonRoom r = rooms[i];
@@ -1525,22 +1587,42 @@ public class DungeonMapBuilderTool : EditorWindow
                 continue;
             }
 
-            // Check if position is inside room bounding box
-            Bounds b = new Bounds(r.transform.position + new Vector3(0f, r.Dimensions.y * 0.5f, 0f), r.Dimensions + Vector3.one * 1.5f);
-            if (b.Contains(position))
+            Vector3 localPt = r.transform.InverseTransformPoint(position);
+            Bounds exactBounds = new Bounds(new Vector3(0f, r.Dimensions.y * 0.5f, 0f), r.Dimensions);
+            if (exactBounds.Contains(localPt))
             {
-                return r;
-            }
-
-            float distSq = (r.transform.position - position).sqrMagnitude;
-            if (distSq < minDistSq)
-            {
-                minDistSq = distSq;
-                closest = r;
+                float distSq = (r.transform.position - position).sqrMagnitude;
+                if (distSq < bestDistSq)
+                {
+                    bestDistSq = distSq;
+                    bestRoom = r;
+                }
             }
         }
 
-        return closest;
+        if (bestRoom != null)
+        {
+            return bestRoom;
+        }
+
+        // 2. If sitting on a doorway or slightly outside, choose the room whose center is closest
+        for (int i = 0; i < rooms.Length; i++)
+        {
+            DungeonRoom r = rooms[i];
+            if (r == null)
+            {
+                continue;
+            }
+
+            float distSq = (r.transform.position - position).sqrMagnitude;
+            if (distSq < bestDistSq)
+            {
+                bestDistSq = distSq;
+                bestRoom = r;
+            }
+        }
+
+        return bestRoom;
     }
 
     private void BakeSceneNavMesh()
