@@ -22,12 +22,48 @@ public class PlayerWallet : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    [Header("Per-Player Quota System")]
+    [SerializeField] private int baseQuota = 100;
+    [SerializeField] private int quotaIncrement = 50;
+
+    public NetworkVariable<int> QuotaTarget = new NetworkVariable<int>(
+        100,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<int> QuotaProgress = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<int> QuotaPoints = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<int> QuotaLevel = new NetworkVariable<int>(
+        1,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public override void OnNetworkSpawn()
     {
-        if (IsServer && BankedMoney.Value == 0)
+        if (IsServer)
         {
-            // Initial contractor signing bonus for testing and first purchases
-            BankedMoney.Value = 75;
+            if (BankedMoney.Value == 0)
+            {
+                // Initial contractor signing bonus for testing and first purchases
+                BankedMoney.Value = 75;
+            }
+
+            if (QuotaTarget.Value <= 0)
+            {
+                QuotaTarget.Value = baseQuota;
+            }
         }
     }
 
@@ -66,8 +102,59 @@ public class PlayerWallet : NetworkBehaviour
         int bankedThisDive = totalExtracted;
         RunMoney.Value = 0;
 
-        Debug.Log($"[PlayerWallet] Player {OwnerClientId} extracted! Banked: +${bankedThisDive} | Total Bank: ${BankedMoney.Value}");
+        // Fulfill per-player quota with the extracted earnings
+        AddQuotaContribution(totalExtracted);
+
+        Debug.Log($"[PlayerWallet] Player {OwnerClientId} extracted! Banked: +${bankedThisDive} | Total Bank: ${BankedMoney.Value} | Quota: {QuotaProgress.Value}/{QuotaTarget.Value} (Tier {QuotaLevel.Value}, {QuotaPoints.Value} pts)");
         return bankedThisDive;
+    }
+
+    /// <summary>
+    /// Calculates the quota target for a specific quota tier/level.
+    /// Increases after every quota completed.
+    /// </summary>
+    public int CalculateQuotaTarget(int level)
+    {
+        int target = baseQuota + Mathf.Max(0, level - 1) * quotaIncrement;
+        return Mathf.Max(10, target);
+    }
+
+    /// <summary>
+    /// Server: Adds money towards this player's individual quota.
+    /// If reached or exceeded: awards +1 point per quota met, advances QuotaLevel,
+    /// increases the next QuotaTarget, and carries over any excess progress.
+    /// </summary>
+    public void AddQuotaContribution(int amount)
+    {
+        if (!IsServer || amount <= 0)
+        {
+            return;
+        }
+
+        QuotaProgress.Value += amount;
+        int pointsEarned = 0;
+
+        while (QuotaTarget.Value > 0 && QuotaProgress.Value >= QuotaTarget.Value)
+        {
+            QuotaProgress.Value -= QuotaTarget.Value;
+            QuotaPoints.Value++;
+            QuotaLevel.Value++;
+            pointsEarned++;
+
+            QuotaTarget.Value = CalculateQuotaTarget(QuotaLevel.Value);
+            Debug.Log($"[PlayerWallet] Player {OwnerClientId} MET QUOTA! Earned +1 Point (Total: {QuotaPoints.Value}). Next Quota Target: ${QuotaTarget.Value} (Tier {QuotaLevel.Value})");
+        }
+
+        if (pointsEarned > 0)
+        {
+            QuotaCompletedClientRpc(pointsEarned, QuotaPoints.Value, QuotaTarget.Value);
+        }
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void QuotaCompletedClientRpc(int pointsAdded, int totalPoints, int nextTarget)
+    {
+        GameHUD.TriggerQuotaCelebration(OwnerClientId, pointsAdded, totalPoints, nextTarget);
     }
 
     /// <summary>
@@ -97,6 +184,30 @@ public class PlayerWallet : NetworkBehaviour
     }
 
     /// <summary>
+    /// Server: Drops all gold collected during this run onto the ground.
+    /// Resets RunMoney back to 0 while preserving persistent BankedMoney.
+    /// Returns the total amount of money dropped.
+    /// </summary>
+    public int DropAllRunMoney(Vector3 origin)
+    {
+        if (!IsServer)
+        {
+            return 0;
+        }
+
+        int amountToDrop = RunMoney.Value;
+        if (amountToDrop <= 0)
+        {
+            return 0;
+        }
+
+        RunMoney.Value = 0;
+        Coin.SpawnCoinDrops(origin, amountToDrop);
+        Debug.Log($"[PlayerWallet] Player {OwnerClientId} died and dropped ${amountToDrop} run gold.");
+        return amountToDrop;
+    }
+
+    /// <summary>
     /// Server: Attempts to spend from persistent banked savings.
     /// Returns true if successful and funds were deducted.
     /// </summary>
@@ -118,7 +229,7 @@ public class PlayerWallet : NetworkBehaviour
     }
 
     /// <summary>
-    /// Server: Full reset (both run and bank to 0), if ever needed.
+    /// Server: Full reset (both run, bank, and quota to initial state), if ever needed.
     /// </summary>
     public void ResetAllMoney()
     {
@@ -129,5 +240,9 @@ public class PlayerWallet : NetworkBehaviour
 
         RunMoney.Value = 0;
         BankedMoney.Value = 0;
+        QuotaProgress.Value = 0;
+        QuotaPoints.Value = 0;
+        QuotaLevel.Value = 1;
+        QuotaTarget.Value = baseQuota;
     }
 }

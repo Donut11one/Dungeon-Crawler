@@ -17,11 +17,42 @@ MonoBehaviour:
   defaultWallThickness: 0.3
   defaultDoorWidth: 3.2
   rooms:
-  - roomId: StorageDepot_755
-    roomLabel: StorageDepot_755
-    position: {x: 22, y: -6.880896e-10, z: 25}
-    rotation: {x: -0, y: 90, z: -0}
-    dimensions: {x: 12, y: 4, z: 12}
+  - roomId: ConnectingCorridor_921
+    roomLabel: ConnectingCorridor_921
+    position: {x: 0, y: -0.00000018937192, z: 36}
+    rotation: {x: -0, y: 0, z: 0}
+    dimensions: {x: 4, y: 4, z: 14}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 1
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    props: []
+    coinSpawns:
+    - {x: 0, y: 0.4, z: -3}
+    - {x: 0, y: 0.4, z: 3}
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: CustomBlankRoom_818
+    roomLabel: CustomBlankRoom_818
+    position: {x: 0, y: -0.0000000805594, z: 58}
+    rotation: {x: -0, y: 0, z: 0}
+    dimensions: {x: 30, y: 4, z: 30}
     floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
     wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
     ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
@@ -34,33 +65,157 @@ MonoBehaviour:
       doorStartsOpen: 0
     levers: []
     doors: []
-    props:
-    - propName: Pillar_1
-      localPosition: {x: -3.5, y: 2, z: 3.5}
-      localEulerAngles: {x: -0, y: 0, z: 0}
-      localScale: {x: 0.8, y: 4, z: 0.8}
-      color: {r: 0.34999996, g: 0.31999996, b: 0.29999998, a: 1}
-    - propName: Pillar_2
-      localPosition: {x: 3.5, y: 2, z: 3.5}
-      localEulerAngles: {x: -0, y: 0, z: 0}
-      localScale: {x: 0.8, y: 4, z: 0.8}
-      color: {r: 0.34999996, g: 0.31999996, b: 0.29999998, a: 1}
-    - propName: Pillar_3
-      localPosition: {x: -3.5, y: 2, z: -3.5}
-      localEulerAngles: {x: -0, y: 0, z: 0}
-      localScale: {x: 0.8, y: 4, z: 0.8}
-      color: {r: 0.34999996, g: 0.31999996, b: 0.29999998, a: 1}
-    - propName: Pillar_4
-      localPosition: {x: 3.5, y: 2, z: -3.5}
-      localEulerAngles: {x: -0, y: 0, z: 0}
-      localScale: {x: 0.8, y: 4, z: 0.8}
-      color: {r: 0.34999996, g: 0.31999996, b: 0.29999998, a: 1}
+    props: []
     coinSpawns:
-    - {x: -0.00000047683716, y: 0.4, z: 3.5000005}
-    - {x: 3.0000005, y: 0.4, z: 0.00000047683716}
-    - {x: 0.00000047683716, y: 0.4, z: -3.5000005}
+    - {x: -11, y: 0.5, z: 4}
+    - {x: -6, y: 0.5, z: 2}
+    - {x: -12, y: 0.5, z: -2}
+    - {x: -3, y: 0.5, z: -2}
+    - {x: 1, y: 0.5, z: 0}
+    - {x: -13, y: 0.5, z: -4}
+    - {x: -7, y: 0.5, z: -7}
+    - {x: 5, y: 0.5, z: 9}
+    - {x: -9, y: 0.5, z: -7}
+    - {x: 1, y: 0.5, z: -4}
+    - {x: 6, y: 0.5, z: -6}
+    - {x: -2, y: 0.5, z: -7}
+    - {x: -6, y: 0.5, z: -1}
+    - {x: 4, y: 0.5, z: 6}
+    - {x: -5, y: 0.5, z: 2}
+    - {x: -3, y: 0.5, z: 5}
+    - {x: -9, y: 0.5, z: 0}
+    - {x: -11, y: 0.5, z: 11}
+    - {x: -5, y: 0.5, z: 7}
+    - {x: 6, y: 0.5, z: 12}
+    - {x: -9, y: 0.5, z: -2}
+    - {x: 1, y: 0.5, z: -1}
+    - {x: -15, y: 0.5, z: 5}
+    - {x: -10, y: 0.5, z: -1}
+    - {x: -12, y: 0.5, z: -5}
+    - {x: -10, y: 0.5, z: 1}
+    - {x: 2, y: 0.5, z: 4}
+    - {x: -9, y: 0.5, z: 1}
+    - {x: -5, y: 0.5, z: -5}
+    - {x: 3, y: 0.5, z: -1}
+    - {x: -9, y: 0.5, z: 4}
+    - {x: -7, y: 0.5, z: -3}
+    - {x: -2, y: 0.5, z: 13}
+    - {x: -10, y: 0.5, z: 11}
+    - {x: -3, y: 0.5, z: -1}
+    - {x: -12, y: 0.5, z: 10}
+    - {x: -8, y: 0.5, z: 2}
+    - {x: 2, y: 0.5, z: -4}
+    - {x: 9, y: 0.5, z: -8}
     enemySpawns:
-    - localPosition: {x: -2.0000002, y: 0.5, z: -0.00000023841858}
+    - localPosition: {x: -7, y: 0.59999996, z: -11}
+      enemyId: scrap_scavenger
+    - localPosition: {x: 5, y: 0.59999996, z: -1}
+      enemyId: scrap_scavenger
+    - localPosition: {x: 5, y: 0.59999996, z: -13}
+      enemyId: scrap_scavenger
+    - localPosition: {x: -2, y: 0.59999996, z: -1}
+      enemyId: scrap_scavenger
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: Room_1
+    roomLabel: Room_1
+    position: {x: 9.918, y: 0, z: 0}
+    rotation: {x: -0, y: 0, z: 0}
+    dimensions: {x: 10, y: 4, z: 10}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 3
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    props: []
+    coinSpawns:
+    - {x: -4.918, y: 3.8989725, z: -3}
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: ConnectingCorridor_539
+    roomLabel: ConnectingCorridor_539
+    position: {x: 10.18, y: -0.00000004639446, z: 11.93}
+    rotation: {x: -0, y: 0, z: 0}
+    dimensions: {x: 4, y: 4, z: 14}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 1
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    props: []
+    coinSpawns:
+    - {x: 0, y: 0.4, z: 3}
+    - {x: 0, y: 0.4, z: -3}
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: CrossroadsJunction_104
+    roomLabel: CrossroadsJunction_104
+    position: {x: 10, y: 0.0000004559256, z: 25}
+    rotation: {x: -0, y: 0, z: 0}
+    dimensions: {x: 12, y: 4, z: 12}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 1
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 2
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    props: []
+    coinSpawns: []
+    enemySpawns:
+    - localPosition: {x: 1, y: 0.59999996, z: 0}
+      enemyId: basic_abnormality
+    - localPosition: {x: 1, y: 0.59999996, z: 4}
+      enemyId: basic_abnormality
+    - localPosition: {x: -3, y: 0.59999996, z: 2}
       enemyId: basic_abnormality
     playerSpawns: []
     hasExtractionPoint: 0
@@ -84,24 +239,30 @@ MonoBehaviour:
     doors: []
     props: []
     coinSpawns:
+    - {x: 3.000001, y: 0.4, z: 3.000001}
+    - {x: -3.000001, y: 0.4, z: -3.000001}
     - {x: -3, y: 0.4, z: 3.000002}
     - {x: 3, y: 0.4, z: -3.000002}
-    - {x: -3.000001, y: 0.4, z: -3.000001}
-    - {x: 3.000001, y: 0.4, z: 3.000001}
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 1
     extractionLocalPosition: {x: 0, y: 0.05, z: 0}
-  - roomId: CustomBlankRoom_818
-    roomLabel: CustomBlankRoom_818
-    position: {x: 0, y: -0.0000000805594, z: 58}
+  - roomId: Room_10x10_704
+    roomLabel: Room_10x10_704
+    position: {x: -0.07399998, y: 0.00000023841858, z: 0}
     rotation: {x: -0, y: 0, z: 0}
-    dimensions: {x: 30, y: 4, z: 30}
+    dimensions: {x: 10, y: 4, z: 10}
     floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
     wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
     ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
     doorways:
-    - side: 1
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 2
       width: 3.2
       offset: 0
       hasDoor: 0
@@ -111,54 +272,12 @@ MonoBehaviour:
     doors: []
     props: []
     coinSpawns:
-    - {x: 1, y: 0.5, z: -1}
-    - {x: -2, y: 0.5, z: -7}
-    - {x: -15, y: 0.5, z: 5}
-    - {x: -5, y: 0.5, z: -5}
-    - {x: -5, y: 0.5, z: 7}
-    - {x: -12, y: 0.5, z: -2}
-    - {x: 6, y: 0.5, z: 12}
-    - {x: -7, y: 0.5, z: -3}
-    - {x: 4, y: 0.5, z: 6}
-    - {x: -11, y: 0.5, z: 11}
-    - {x: -13, y: 0.5, z: -4}
-    - {x: 6, y: 0.5, z: -6}
-    - {x: 1, y: 0.5, z: -4}
-    - {x: -6, y: 0.5, z: 2}
-    - {x: -10, y: 0.5, z: -1}
-    - {x: -6, y: 0.5, z: -1}
-    - {x: 2, y: 0.5, z: 4}
-    - {x: -7, y: 0.5, z: -7}
-    - {x: -3, y: 0.5, z: -2}
-    - {x: -3, y: 0.5, z: 5}
-    - {x: -9, y: 0.5, z: 4}
-    - {x: -9, y: 0.5, z: 0}
-    - {x: -3, y: 0.5, z: -1}
-    - {x: -5, y: 0.5, z: 2}
-    - {x: -12, y: 0.5, z: 10}
-    - {x: -12, y: 0.5, z: -5}
-    - {x: -9, y: 0.5, z: -2}
-    - {x: -8, y: 0.5, z: 2}
-    - {x: -10, y: 0.5, z: 1}
-    - {x: 5, y: 0.5, z: 9}
-    - {x: 1, y: 0.5, z: 0}
-    - {x: 2, y: 0.5, z: -4}
-    - {x: -2, y: 0.5, z: 13}
-    - {x: -11, y: 0.5, z: 4}
-    - {x: -9, y: 0.5, z: -7}
-    - {x: 3, y: 0.5, z: -1}
-    - {x: -10, y: 0.5, z: 11}
-    - {x: 9, y: 0.5, z: -8}
-    - {x: -9, y: 0.5, z: 1}
-    enemySpawns:
-    - localPosition: {x: 5, y: 0.59999996, z: -13}
-      enemyId: scrap_scavenger
-    - localPosition: {x: -7, y: 0.59999996, z: -11}
-      enemyId: scrap_scavenger
-    - localPosition: {x: -2, y: 0.59999996, z: -1}
-      enemyId: scrap_scavenger
-    - localPosition: {x: 5, y: 0.59999996, z: -1}
-      enemyId: scrap_scavenger
+    - {x: 2.074, y: 0.5, z: 3}
+    - {x: -0.926, y: 0.5, z: -4}
+    - {x: -1.926, y: 0.5, z: -2}
+    - {x: -0.926, y: 0.5, z: 2}
+    - {x: 2.074, y: 0.5, z: -2}
+    enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
     extractionLocalPosition: {x: 0, y: 0, z: 0}
@@ -233,35 +352,23 @@ MonoBehaviour:
       startsOpen: 0
     props: []
     coinSpawns:
-    - {x: -1.5, y: 0.4, z: 2}
     - {x: 0, y: 0.4, z: 1}
+    - {x: -1.5, y: 0.4, z: 2}
     - {x: 1.5, y: 0.4, z: 2}
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
     extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: CrossroadsJunction_104
-    roomLabel: CrossroadsJunction_104
-    position: {x: 10, y: 0.0000004559256, z: 25}
-    rotation: {x: -0, y: 0, z: 0}
+  - roomId: StorageDepot_755
+    roomLabel: StorageDepot_755
+    position: {x: 22, y: -6.880896e-10, z: 25}
+    rotation: {x: -0, y: 90, z: -0}
     dimensions: {x: 12, y: 4, z: 12}
     floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
     wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
     ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
     doorways:
-    - side: 0
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
     - side: 1
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    - side: 2
       width: 3.2
       offset: 0
       hasDoor: 0
@@ -269,141 +376,34 @@ MonoBehaviour:
       doorStartsOpen: 0
     levers: []
     doors: []
-    props: []
-    coinSpawns: []
+    props:
+    - propName: Pillar_1
+      localPosition: {x: -3.5, y: 2, z: 3.5}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      localScale: {x: 0.8, y: 4, z: 0.8}
+      color: {r: 0.34999996, g: 0.31999996, b: 0.29999998, a: 1}
+    - propName: Pillar_2
+      localPosition: {x: 3.5, y: 2, z: 3.5}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      localScale: {x: 0.8, y: 4, z: 0.8}
+      color: {r: 0.34999996, g: 0.31999996, b: 0.29999998, a: 1}
+    - propName: Pillar_3
+      localPosition: {x: -3.5, y: 2, z: -3.5}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      localScale: {x: 0.8, y: 4, z: 0.8}
+      color: {r: 0.34999996, g: 0.31999996, b: 0.29999998, a: 1}
+    - propName: Pillar_4
+      localPosition: {x: 3.5, y: 2, z: -3.5}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      localScale: {x: 0.8, y: 4, z: 0.8}
+      color: {r: 0.34999996, g: 0.31999996, b: 0.29999998, a: 1}
+    coinSpawns:
+    - {x: 3.0000005, y: 0.4, z: 0.00000047683716}
+    - {x: -0.00000047683716, y: 0.4, z: 3.5000005}
+    - {x: 0.00000047683716, y: 0.4, z: -3.5000005}
     enemySpawns:
-    - localPosition: {x: 1, y: 0.59999996, z: 0}
+    - localPosition: {x: -2.0000002, y: 0.5, z: -0.00000023841858}
       enemyId: basic_abnormality
-    - localPosition: {x: -3, y: 0.59999996, z: 2}
-      enemyId: basic_abnormality
-    - localPosition: {x: 1, y: 0.59999996, z: 4}
-      enemyId: basic_abnormality
-    playerSpawns: []
-    hasExtractionPoint: 0
-    extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: ConnectingCorridor_539
-    roomLabel: ConnectingCorridor_539
-    position: {x: 10.18, y: -0.00000004639446, z: 11.93}
-    rotation: {x: -0, y: 0, z: 0}
-    dimensions: {x: 4, y: 4, z: 14}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 0
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    - side: 1
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers: []
-    doors: []
-    props: []
-    coinSpawns:
-    - {x: 0, y: 0.4, z: -3}
-    - {x: 0, y: 0.4, z: 3}
-    enemySpawns: []
-    playerSpawns: []
-    hasExtractionPoint: 0
-    extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: ConnectingCorridor_921
-    roomLabel: ConnectingCorridor_921
-    position: {x: 0, y: -0.00000018937192, z: 36}
-    rotation: {x: -0, y: 0, z: 0}
-    dimensions: {x: 4, y: 4, z: 14}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 0
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    - side: 1
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers: []
-    doors: []
-    props: []
-    coinSpawns:
-    - {x: 0, y: 0.4, z: 3}
-    - {x: 0, y: 0.4, z: -3}
-    enemySpawns: []
-    playerSpawns: []
-    hasExtractionPoint: 0
-    extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: Room_1
-    roomLabel: Room_1
-    position: {x: 9.918, y: 0, z: 0}
-    rotation: {x: -0, y: 0, z: 0}
-    dimensions: {x: 10, y: 4, z: 10}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 3
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    - side: 0
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers: []
-    doors: []
-    props: []
-    coinSpawns:
-    - {x: -4.918, y: 3.8989725, z: -3}
-    enemySpawns: []
-    playerSpawns: []
-    hasExtractionPoint: 0
-    extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: Room_10x10_704
-    roomLabel: Room_10x10_704
-    position: {x: -0.07399998, y: 0.00000023841858, z: 0}
-    rotation: {x: -0, y: 0, z: 0}
-    dimensions: {x: 10, y: 4, z: 10}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 0
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    - side: 2
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers: []
-    doors: []
-    props: []
-    coinSpawns:
-    - {x: -1.926, y: 0.5, z: -2}
-    - {x: 2.074, y: 0.5, z: 3}
-    - {x: -0.926, y: 0.5, z: 2}
-    - {x: -0.926, y: 0.5, z: -4}
-    - {x: 2.074, y: 0.5, z: -2}
-    enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
     extractionLocalPosition: {x: 0, y: 0, z: 0}

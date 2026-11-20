@@ -37,6 +37,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     private RagdollController ragdollController;
     private Vector3 spawnPosition;
+    private Vector3 lastSafeGroundedPosition;
     private float respawnTimer;
     private float damageCooldownTimer;
 
@@ -80,6 +81,24 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             damageCooldownTimer -= Time.deltaTime;
         }
 
+        if (!IsDead.Value)
+        {
+            // Record last safe grounded position when player is on solid floor
+            if (transform.position.y > -2f)
+            {
+                if (Physics.Raycast(transform.position + Vector3.up * 0.2f, Vector3.down, out RaycastHit groundHit, 1.2f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    lastSafeGroundedPosition = groundHit.point + Vector3.up * 0.25f;
+                }
+            }
+
+            // Fall into the void / suicide check
+            if (transform.position.y < -25f)
+            {
+                TakeDamage(9999, Vector3.up, true);
+            }
+        }
+
         if (IsDead.Value)
         {
             // Only auto-respawn if in the Lobby (for lobby ragdoll/PVP fun)
@@ -107,9 +126,19 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     /// <summary>
     /// Server-side: Apply damage and knockback to this player.
-    /// Uses damageCooldown to prevent rapid multi-hit spam.
+    /// Default overload: treats hits >= 30 damage as heavy knockdown hits.
     /// </summary>
     public void TakeDamage(int damage, Vector3 hitDirection)
+    {
+        TakeDamage(damage, hitDirection, damage >= 30);
+    }
+
+    /// <summary>
+    /// Server-side: Apply damage and knockback to this player.
+    /// Only heavy hits with big windup trigger ragdoll knockdown.
+    /// Normal hits deal damage and apply physical pushback without knocking the player down.
+    /// </summary>
+    public void TakeDamage(int damage, Vector3 hitDirection, bool isHeavyHit)
     {
         if (!IsServer)
         {
@@ -133,18 +162,35 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         damageCooldownTimer = damageCooldown;
         CurrentHealth.Value -= damage;
 
-        // Ragdoll on any hit
-        if (ragdollController != null)
-        {
-            Vector3 knockback = hitDirection.normalized * damage * knockbackMultiplier;
-            knockback.y = Mathf.Abs(knockback.y) + 3f; // Always pop up a bit
-            ragdollController.TriggerRagdoll(knockback);
-        }
-
         if (CurrentHealth.Value <= 0)
         {
             CurrentHealth.Value = 0;
             HandleDeath();
+            return;
+        }
+
+        // Only big hits with big windups trigger ragdoll knockdown!
+        if (isHeavyHit && ragdollController != null)
+        {
+            Vector3 knockback = hitDirection.normalized * damage * knockbackMultiplier;
+            knockback.y = Mathf.Abs(knockback.y) + 3.5f; // Always pop up
+            ragdollController.TriggerRagdoll(knockback);
+        }
+        else
+        {
+            // Normal hit: apply physical impulse pushback to Rigidbody without knockdown
+            ApplyFlinchPushClientRpc(hitDirection.normalized * (damage * 0.35f));
+        }
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void ApplyFlinchPushClientRpc(Vector3 push)
+    {
+        Rigidbody rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            push.y = Mathf.Max(0.5f, push.y);
+            rb.AddForce(push, ForceMode.Impulse);
         }
     }
 
@@ -154,19 +200,41 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         TakeDamage(damage, hitDirection);
     }
 
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void TakeDamageWithHeavyServerRpc(int damage, Vector3 hitDirection, bool isHeavyHit)
+    {
+        TakeDamage(damage, hitDirection, isHeavyHit);
+    }
+
     private void HandleDeath()
     {
         IsDead.Value = true;
         respawnTimer = respawnDelay;
 
-        // Death in dungeon: carried items disappear!
-        if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value == GameManager.GameState.Playing)
+        // Resolve drop origin: if falling off edge, drop at the last solid ledge
+        Vector3 dropOrigin = transform.position.y < -5f && lastSafeGroundedPosition.sqrMagnitude > 0.01f
+            ? lastSafeGroundedPosition
+            : transform.position + Vector3.up * 0.7f;
+
+        // 1. Drop all carried hotbar items onto the ground
+        PlayerInventory inv = GetComponent<PlayerInventory>();
+        if (inv != null)
         {
-            PlayerInventory inv = GetComponent<PlayerInventory>();
-            if (inv != null)
-            {
-                inv.ClearInventory();
-            }
+            inv.DropAllItems(dropOrigin);
+        }
+
+        // 2. Drop all gold collected on this run onto the ground
+        PlayerWallet wallet = GetComponent<PlayerWallet>();
+        if (wallet != null)
+        {
+            wallet.DropAllRunMoney(dropOrigin);
+        }
+
+        // 3. Drop any grabbed physics object (barrel, crate)
+        GrabThrow grabThrow = GetComponent<GrabThrow>();
+        if (grabThrow != null)
+        {
+            grabThrow.ForceDrop();
         }
 
         // Big death ragdoll

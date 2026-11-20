@@ -76,6 +76,11 @@ public class DungeonLever : NetworkBehaviour
 
         IsPulled.OnValueChanged += OnPulledStateChanged;
         UpdateVisuals(IsPulled.Value, false);
+
+        if (IsServer && !string.IsNullOrEmpty(mechanismChannel))
+        {
+            DungeonDoor.EvaluateDoorsForChannel(mechanismChannel);
+        }
     }
 
     public override void OnNetworkDespawn()
@@ -91,6 +96,11 @@ public class DungeonLever : NetworkBehaviour
         {
             FocusedLever = null;
         }
+
+        if (IsServer && !string.IsNullOrEmpty(mechanismChannel))
+        {
+            DungeonDoor.EvaluateDoorsForChannel(mechanismChannel);
+        }
     }
 
     public override void OnDestroy()
@@ -105,6 +115,11 @@ public class DungeonLever : NetworkBehaviour
         if (FocusedLever == this)
         {
             FocusedLever = null;
+        }
+
+        if (IsServer && !string.IsNullOrEmpty(mechanismChannel))
+        {
+            DungeonDoor.EvaluateDoorsForChannel(mechanismChannel);
         }
     }
 
@@ -316,7 +331,47 @@ public class DungeonLever : NetworkBehaviour
         if (!string.IsNullOrEmpty(mechanismChannel))
         {
             OnMechanismToggled?.Invoke(mechanismChannel, newValue);
+
+            if (IsServer)
+            {
+                DungeonDoor.EvaluateDoorsForChannel(mechanismChannel);
+            }
         }
+    }
+
+    /// <summary>
+    /// Checks if all active levers on the specified channel are currently pulled (ON).
+    /// Returns total active lever count and count of pulled levers.
+    /// </summary>
+    public static bool AreAllLeversPulledForChannel(string channel, out int pulledCount, out int totalCount)
+    {
+        pulledCount = 0;
+        totalCount = 0;
+
+        if (string.IsNullOrEmpty(channel))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < activeLevers.Count; i++)
+        {
+            DungeonLever lever = activeLevers[i];
+            if (lever == null)
+            {
+                continue;
+            }
+
+            if (string.Equals(lever.MechanismChannel, channel, System.StringComparison.OrdinalIgnoreCase))
+            {
+                totalCount++;
+                if (lever.IsPulled.Value)
+                {
+                    pulledCount++;
+                }
+            }
+        }
+
+        return totalCount > 0 && pulledCount >= totalCount;
     }
 
     private void UpdateVisuals(bool pulled, bool playSound)
@@ -352,6 +407,15 @@ public class DungeonLever : NetworkBehaviour
 
         Color accentColor = IsPulled.Value ? activeColor : new Color(0.2f, 0.85f, 1f);
 
+        int pulled = 0;
+        int total = 0;
+        bool hasMultiLevers = false;
+        if (!string.IsNullOrEmpty(mechanismChannel))
+        {
+            AreAllLeversPulledForChannel(mechanismChannel, out pulled, out total);
+            hasMultiLevers = total > 1;
+        }
+
         // 1. Floating 3D world tag
         Vector3 worldPoint = transform.position + Vector3.up * 0.42f;
         Vector3 screenPos = cam.WorldToScreenPoint(worldPoint);
@@ -369,11 +433,16 @@ public class DungeonLever : NetworkBehaviour
             tagStyle.normal.textColor = accentColor;
 
             string statusTag = IsPulled.Value ? "ACTIVE" : "READY";
-            GUI.Label(new Rect(tagX - 80f, tagY - 12f, 160f, 24f), $"{leverName} [{statusTag}]", tagStyle);
+            if (hasMultiLevers)
+            {
+                statusTag = $"{statusTag} ({pulled}/{total} ACTIVATED)";
+            }
+            GUI.Label(new Rect(tagX - 100f, tagY - 12f, 200f, 24f), $"{leverName} [{statusTag}]", tagStyle);
         }
 
         // 2. Centered HUD action prompt
-        string actionText = IsPulled.Value ? $"[E] RESET {leverName.ToUpper()}" : $"[E] PULL {leverName.ToUpper()}";
+        string multiInfo = hasMultiLevers ? $"  ({pulled}/{total} ACTIVATED)" : "";
+        string actionText = IsPulled.Value ? $"[E] RESET {leverName.ToUpper()}{multiInfo}" : $"[E] PULL {leverName.ToUpper()}{multiInfo}";
         float promptW = Mathf.Max(260f, actionText.Length * 9.5f);
         float promptH = 34f;
         float promptX = (Screen.width - promptW) * 0.5f;

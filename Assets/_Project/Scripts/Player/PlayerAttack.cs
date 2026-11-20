@@ -307,7 +307,8 @@ public class PlayerAttack : NetworkBehaviour
             if (netObj != null)
             {
                 PlayAttackFeedback(pendingAttackName, hit: true);
-                AttackServerRpc(netObj.NetworkObjectId, pendingDamage, hitDirection * pendingKnockback);
+                bool isHeavy = pendingDamage >= 35 || pendingKnockback >= 11f;
+                AttackServerRpc(netObj.NetworkObjectId, pendingDamage, hitDirection * pendingKnockback, isHeavy);
                 return;
             }
 
@@ -327,7 +328,7 @@ public class PlayerAttack : NetworkBehaviour
     }
 
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
-    private void AttackServerRpc(ulong targetNetId, int damage, Vector3 knockbackImpulse)
+    private void AttackServerRpc(ulong targetNetId, int damage, Vector3 knockbackImpulse, bool isHeavyHit = false)
     {
         if (NetworkManager.Singleton == null)
         {
@@ -345,7 +346,7 @@ public class PlayerAttack : NetworkBehaviour
             IDamageable damageable = targetNetObj.GetComponentInParent<IDamageable>();
             if (damageable != null)
             {
-                damageable.TakeDamage(damage, knockbackImpulse);
+                damageable.TakeDamage(damage, knockbackImpulse, isHeavyHit);
             }
 
             Rigidbody rb = targetNetObj.GetComponentInParent<Rigidbody>();

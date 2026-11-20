@@ -180,6 +180,37 @@ public class PlayerInventory : NetworkBehaviour
     }
 
     /// <summary>
+    /// Server-authoritative: Drops all carried items in the hotbar onto the ground around origin.
+    /// Called when the player dies (whether from mobs, friendly fire, or hazards).
+    /// </summary>
+    public void DropAllItems(Vector3 origin)
+    {
+        if (!IsServer || Slots == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            InventorySlot slot = Slots[i];
+            if (slot.IsEmpty)
+            {
+                continue;
+            }
+
+            Vector3 scatterDir = Random.insideUnitSphere;
+            scatterDir.y = Mathf.Abs(scatterDir.y) * 0.5f + 0.5f;
+            Vector3 dropPos = origin + new Vector3(Random.Range(-0.35f, 0.35f), 0.2f, Random.Range(-0.35f, 0.35f));
+            Vector3 dropVel = scatterDir.normalized * Random.Range(2.0f, 4.0f) + Vector3.up * 2.0f;
+
+            WorldItemPickup.SpawnPickup(slot.itemId.ToString(), slot.count, dropPos, dropVel);
+            Slots[i] = default;
+        }
+
+        Debug.Log($"[PlayerInventory] Player {OwnerClientId} dropped all carried items on death.");
+    }
+
+    /// <summary>
     /// Checks if there is at least one empty hotbar slot.
     /// </summary>
     public bool HasFreeSlot()

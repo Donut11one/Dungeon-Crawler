@@ -199,10 +199,20 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
 
     /// <summary>
     /// Server-side: Apply damage and knockback to this enemy.
-    /// Alerts enemy AI to the attacker.
-    /// Uses damageCooldown to prevent multiple hits in a single physics tick.
+    /// Alerts enemy AI to the attacker, stuns them, and resets their attack timer.
+    /// Does NOT ragdoll living enemies on hit.
     /// </summary>
     public void TakeDamage(int damage, Vector3 hitDirection)
+    {
+        TakeDamage(damage, hitDirection, false);
+    }
+
+    /// <summary>
+    /// Server-side: Apply damage and knockback to this enemy.
+    /// Player attacks do NOT ragdoll living enemies; they stun them and reset their attack cooldown.
+    /// Only death triggers ragdoll.
+    /// </summary>
+    public void TakeDamage(int damage, Vector3 hitDirection, bool isHeavyHit)
     {
         if (!IsServer)
         {
@@ -220,18 +230,11 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
         damageCooldownTimer = damageCooldown;
         CurrentHealth.Value -= damage;
 
-        // Alert enemy AI to attacker
+        // Alert enemy AI to attacker, STUN them, and RESET their attack timer
         if (enemyAI != null)
         {
             enemyAI.AlertToAttacker(hitDirection);
-        }
-
-        // Ragdoll on any hit
-        if (ragdollController != null)
-        {
-            Vector3 knockback = hitDirection.normalized * damage * knockbackMultiplier;
-            knockback.y = Mathf.Abs(knockback.y) + 5f; // Pop up on hit
-            ragdollController.TriggerRagdoll(knockback);
+            enemyAI.Stun(0.65f);
         }
 
         if (CurrentHealth.Value <= 0)
@@ -239,12 +242,34 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
             CurrentHealth.Value = 0;
             HandleDeath();
         }
+        else
+        {
+            // Apply a crisp physical flinch impulse without ragdolling
+            ApplyFlinchClientRpc(hitDirection.normalized * 4.5f);
+        }
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void ApplyFlinchClientRpc(Vector3 flinch)
+    {
+        Rigidbody rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            flinch.y = 0.2f;
+            rb.AddForce(flinch, ForceMode.Impulse);
+        }
     }
 
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void TakeDamageServerRpc(int damage, Vector3 hitDirection)
     {
         TakeDamage(damage, hitDirection);
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void TakeDamageWithHeavyServerRpc(int damage, Vector3 hitDirection, bool isHeavyHit)
+    {
+        TakeDamage(damage, hitDirection, isHeavyHit);
     }
 
     private void HandleDeath()

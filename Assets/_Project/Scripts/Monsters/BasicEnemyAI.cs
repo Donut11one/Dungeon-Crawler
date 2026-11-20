@@ -57,6 +57,12 @@ public class BasicEnemyAI : NetworkBehaviour
     [SerializeField] private Color cooldownBodyColor = new Color(0.2f, 0.5f, 0.85f);
     [SerializeField] private Color cooldownEyeColor = new Color(0.2f, 0.85f, 1f);
 
+    [Header("Stun & Heavy Attack Visuals")]
+    [SerializeField] private Color stunBodyColor = new Color(0.85f, 0.75f, 0.15f);
+    [SerializeField] private Color stunEyeColor = Color.white;
+    [SerializeField] private Color heavyWindupBodyColor = new Color(1f, 0.05f, 0.25f);
+    [SerializeField] private Color heavyWindupEyeColor = new Color(1f, 0.95f, 0.1f);
+
     public NetworkVariable<CombatState> CurrentCombatState = new NetworkVariable<CombatState>(
         CombatState.Idle,
         NetworkVariableReadPermission.Everyone,
@@ -64,6 +70,18 @@ public class BasicEnemyAI : NetworkBehaviour
     );
 
     public NetworkVariable<bool> IsAggroed = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<bool> IsStunned = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<bool> IsHeavyWindup = new NetworkVariable<bool>(
         false,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
@@ -81,7 +99,10 @@ public class BasicEnemyAI : NetworkBehaviour
     private float attackTimer;
     private float attackPauseTimer;
     private float windupTimer;
+    private float stunTimer;
     private bool isAttacking;
+    private bool isCurrentAttackHeavy;
+    private int attackCount;
     private float wanderTimer;
     private Transform currentTarget;
 
@@ -124,6 +145,8 @@ public class BasicEnemyAI : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         CurrentCombatState.OnValueChanged += OnCombatStateChanged;
+        IsStunned.OnValueChanged += OnStunStateChanged;
+        IsHeavyWindup.OnValueChanged += OnHeavyWindupChanged;
 
         // Apply current visual state on spawn
         UpdateStateVisuals(CurrentCombatState.Value);
@@ -132,6 +155,18 @@ public class BasicEnemyAI : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         CurrentCombatState.OnValueChanged -= OnCombatStateChanged;
+        IsStunned.OnValueChanged -= OnStunStateChanged;
+        IsHeavyWindup.OnValueChanged -= OnHeavyWindupChanged;
+    }
+
+    private void OnStunStateChanged(bool previous, bool current)
+    {
+        UpdateStateVisuals(CurrentCombatState.Value);
+    }
+
+    private void OnHeavyWindupChanged(bool previous, bool current)
+    {
+        UpdateStateVisuals(CurrentCombatState.Value);
     }
 
     private void OnCombatStateChanged(CombatState previous, CombatState current)
@@ -154,25 +189,38 @@ public class BasicEnemyAI : NetworkBehaviour
         Color bodyColor;
         Color eyeColor;
 
-        switch (state)
+        if (IsStunned.Value)
         {
-            case CombatState.Attacking:
-                bodyColor = attackBodyColor;
-                eyeColor = attackEyeColor;
-                break;
-            case CombatState.Cooldown:
-                bodyColor = cooldownBodyColor;
-                eyeColor = cooldownEyeColor;
-                break;
-            case CombatState.Chasing:
-                bodyColor = chaseBodyColor;
-                eyeColor = chaseEyeColor;
-                break;
-            case CombatState.Idle:
-            default:
-                bodyColor = idleBodyColor;
-                eyeColor = idleEyeColor;
-                break;
+            bodyColor = stunBodyColor;
+            eyeColor = stunEyeColor;
+        }
+        else if (IsHeavyWindup.Value)
+        {
+            bodyColor = heavyWindupBodyColor;
+            eyeColor = heavyWindupEyeColor;
+        }
+        else
+        {
+            switch (state)
+            {
+                case CombatState.Attacking:
+                    bodyColor = attackBodyColor;
+                    eyeColor = attackEyeColor;
+                    break;
+                case CombatState.Cooldown:
+                    bodyColor = cooldownBodyColor;
+                    eyeColor = cooldownEyeColor;
+                    break;
+                case CombatState.Chasing:
+                    bodyColor = chaseBodyColor;
+                    eyeColor = chaseEyeColor;
+                    break;
+                case CombatState.Idle:
+                default:
+                    bodyColor = idleBodyColor;
+                    eyeColor = idleEyeColor;
+                    break;
+            }
         }
 
         if (bodyRenderer != null)
@@ -273,6 +321,28 @@ public class BasicEnemyAI : NetworkBehaviour
 
         if (!canMove && !canAttack)
         {
+            return;
+        }
+
+        // Handle stun timer: halts movement, prevents attacking, stays dazed
+        if (stunTimer > 0f)
+        {
+            stunTimer -= Time.deltaTime;
+            if (agent != null && agent.enabled && agent.isOnNavMesh)
+            {
+                agent.isStopped = true;
+                agent.velocity = Vector3.zero;
+            }
+
+            if (stunTimer <= 0f)
+            {
+                stunTimer = 0f;
+                IsStunned.Value = false;
+                if (agent != null && agent.enabled && agent.isOnNavMesh)
+                {
+                    agent.isStopped = false;
+                }
+            }
             return;
         }
 
@@ -469,6 +539,38 @@ public class BasicEnemyAI : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Stuns the enemy when hit by the player. Interrupts active attacks,
+    /// resets the attack cooldown timer, and halts movement for the duration.
+    /// Living enemies do not ragdoll on player hits.
+    /// </summary>
+    public void Stun(float duration = 0.65f)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        if (enemyHealth != null && enemyHealth.IsDead.Value)
+        {
+            return;
+        }
+
+        CancelAttack();
+
+        // Reset attack timer so the enemy is delayed before their next strike
+        attackTimer = Mathf.Max(attackTimer, attackCooldown);
+
+        stunTimer = Mathf.Max(stunTimer, duration);
+        IsStunned.Value = true;
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.isStopped = true;
+            agent.velocity = Vector3.zero;
+        }
+    }
+
     private void StartAttack()
     {
         if (!canAttack || currentTarget == null)
@@ -486,8 +588,14 @@ public class BasicEnemyAI : NetworkBehaviour
             return;
         }
 
+        attackCount++;
+        // Heavy attacks with big windups happen periodically (e.g. every 3rd attack, or 50% for high knockback brutes)
+        bool doHeavy = (attackCount % 3 == 0) || (attackKnockback >= 12f && attackCount % 2 == 1);
+        isCurrentAttackHeavy = doHeavy;
+        IsHeavyWindup.Value = doHeavy;
+
         isAttacking = true;
-        windupTimer = attackWindup;
+        windupTimer = doHeavy ? Mathf.Max(1.15f, attackWindup * 2.8f) : Mathf.Max(0.35f, attackWindup);
         SetCombatState(CombatState.Attacking);
 
         if (agent != null && agent.enabled && agent.isOnNavMesh)
@@ -505,12 +613,13 @@ public class BasicEnemyAI : NetworkBehaviour
             return;
         }
 
-        // Rotate smoothly towards target during windup
+        // Rotate towards target during windup. If charging a big heavy hit, rotate slowly so player can dodge!
         Vector3 lookDir = currentTarget.position - transform.position;
         lookDir.y = 0f;
         if (lookDir.sqrMagnitude > 0.001f)
         {
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), Time.deltaTime * 10f);
+            float turnSpeed = isCurrentAttackHeavy ? 2.2f : 10f;
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), Time.deltaTime * turnSpeed);
         }
 
         windupTimer -= Time.deltaTime;
@@ -523,8 +632,12 @@ public class BasicEnemyAI : NetworkBehaviour
     private void ExecuteAttackStrike()
     {
         isAttacking = false;
+        bool wasHeavy = isCurrentAttackHeavy;
+        isCurrentAttackHeavy = false;
+        IsHeavyWindup.Value = false;
+
         attackTimer = attackCooldown;
-        attackPauseTimer = attackRecovery;
+        attackPauseTimer = wasHeavy ? attackRecovery * 1.35f : attackRecovery;
         SetCombatState(CombatState.Cooldown);
 
         if (agent != null && agent.enabled && agent.isOnNavMesh)
@@ -540,7 +653,8 @@ public class BasicEnemyAI : NetworkBehaviour
 
         // Verify target is still within strike range and not downed
         float dist = Vector3.Distance(transform.position, currentTarget.position);
-        if (dist <= attackRange + 0.8f)
+        float reach = wasHeavy ? attackRange + 0.8f : attackRange + 0.4f;
+        if (dist <= reach)
         {
             RagdollController targetRagdoll = currentTarget.GetComponent<RagdollController>();
             if (targetRagdoll != null && targetRagdoll.IsRagdolled.Value)
@@ -552,8 +666,20 @@ public class BasicEnemyAI : NetworkBehaviour
             if (damageable != null)
             {
                 Vector3 hitDir = (currentTarget.position - transform.position).normalized;
-                hitDir.y = 0.35f; // Upward knockback pop
-                damageable.TakeDamage(attackDamage, hitDir * attackKnockback);
+                if (wasHeavy)
+                {
+                    // Big Heavy Hit with big windup: knocks down!
+                    hitDir.y = 0.5f;
+                    int heavyDmg = Mathf.RoundToInt(attackDamage * 1.6f);
+                    float heavyKb = Mathf.Max(14f, attackKnockback * 1.5f);
+                    damageable.TakeDamage(heavyDmg, hitDir * heavyKb, true);
+                }
+                else
+                {
+                    // Normal Hit: does NOT knock down!
+                    hitDir.y = 0.2f;
+                    damageable.TakeDamage(attackDamage, hitDir * 5f, false);
+                }
             }
         }
     }
@@ -561,6 +687,8 @@ public class BasicEnemyAI : NetworkBehaviour
     private void CancelAttack()
     {
         isAttacking = false;
+        isCurrentAttackHeavy = false;
+        IsHeavyWindup.Value = false;
         windupTimer = 0f;
         attackPauseTimer = 0f;
         if (agent != null && agent.enabled && agent.isOnNavMesh)

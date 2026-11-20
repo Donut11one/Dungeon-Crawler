@@ -180,25 +180,77 @@ public class WorldItemPickup : WorldPickup
         }
     }
 
+    private static GameObject itemPickupPrefabCache;
+
+    public static GameObject GetItemPickupPrefab()
+    {
+        if (itemPickupPrefabCache != null)
+        {
+            return itemPickupPrefabCache;
+        }
+
+#if UNITY_EDITOR
+        itemPickupPrefabCache = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Items/ItemPickupPrefab.prefab");
+#endif
+
+        if (itemPickupPrefabCache == null && NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
+        {
+            foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
+            {
+                if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<WorldItemPickup>() != null)
+                {
+                    itemPickupPrefabCache = netPrefab.Prefab;
+                    break;
+                }
+            }
+        }
+
+        return itemPickupPrefabCache;
+    }
+
     /// <summary>
     /// Spawns a networked pickup item into the world with physics launch velocity.
     /// Used when dropping items, breaking crates, or monster loot drops.
     /// </summary>
     public static GameObject SpawnPickup(string itemId, int count, Vector3 position, Vector3 velocity)
     {
-        GameObject obj = new GameObject($"Pickup_{itemId}");
-        obj.transform.position = position;
+        GameObject prefab = GetItemPickupPrefab();
+        GameObject obj = prefab != null
+            ? Object.Instantiate(prefab, position, Quaternion.identity)
+            : new GameObject($"Pickup_{itemId}");
 
-        NetworkObject netObj = obj.AddComponent<NetworkObject>();
-        Rigidbody rb = obj.AddComponent<Rigidbody>();
+        if (prefab == null)
+        {
+            obj.transform.position = position;
+        }
+
+        NetworkObject netObj = obj.GetComponent<NetworkObject>();
+        if (netObj == null)
+        {
+            netObj = obj.AddComponent<NetworkObject>();
+        }
+
+        Rigidbody rb = obj.GetComponent<Rigidbody>();
+        if (rb == null)
+        {
+            rb = obj.AddComponent<Rigidbody>();
+        }
         rb.mass = 1.5f;
         rb.linearDamping = 1f;
 
-        SphereCollider sc = obj.AddComponent<SphereCollider>();
+        SphereCollider sc = obj.GetComponent<SphereCollider>();
+        if (sc == null)
+        {
+            sc = obj.AddComponent<SphereCollider>();
+        }
         sc.isTrigger = true;
         sc.radius = 0.75f;
 
-        WorldItemPickup pickup = obj.AddComponent<WorldItemPickup>();
+        WorldItemPickup pickup = obj.GetComponent<WorldItemPickup>();
+        if (pickup == null)
+        {
+            pickup = obj.AddComponent<WorldItemPickup>();
+        }
 
         netObj.Spawn();
 

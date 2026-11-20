@@ -44,7 +44,8 @@ public class ImpactDamage : NetworkBehaviour
         {
             int damage = baseDamage + Mathf.RoundToInt(speed * damagePerSpeed);
             Vector3 hitDir = rb != null ? rb.linearVelocity.normalized : transform.forward;
-            damageable.TakeDamage(damage, hitDir);
+            bool isHeavy = speed >= 5.5f;
+            damageable.TakeDamage(damage, hitDir, isHeavy);
         }
     }
 }

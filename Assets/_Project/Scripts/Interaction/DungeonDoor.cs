@@ -15,6 +15,7 @@ public class DungeonDoor : NetworkBehaviour
     [Header("Door Settings")]
     [SerializeField] private string doorName = "Security Blast Door";
     [SerializeField] private string mechanismChannel = "";
+    [SerializeField] private int requiredLevers = 0; // 0 = require all linked levers on this channel (e.g. 2 of 2)
     [SerializeField] private bool startsOpen = false;
     [SerializeField] private float slideSpeed = 3.6f;
     [SerializeField] private Vector3 openLocalOffset = new Vector3(0f, 3.4f, 0f);
@@ -45,16 +46,30 @@ public class DungeonDoor : NetworkBehaviour
         }
     }
 
+    public int RequiredLevers
+    {
+        get
+        {
+            return requiredLevers;
+        }
+    }
+
+    public void SetRequiredLevers(int count)
+    {
+        requiredLevers = count;
+    }
+
     public void SetMechanismChannel(string channel)
     {
         mechanismChannel = channel;
     }
 
-    public void Configure(string name, string channel, bool startOpen)
+    public void Configure(string name, string channel, bool startOpen, int leversNeeded = 0)
     {
         doorName = name;
         mechanismChannel = channel;
         startsOpen = startOpen;
+        requiredLevers = leversNeeded;
     }
 
     public NetworkVariable<bool> IsOpen = new NetworkVariable<bool>(
@@ -88,7 +103,14 @@ public class DungeonDoor : NetworkBehaviour
 
         if (IsServer)
         {
-            IsOpen.Value = startsOpen;
+            if (startsOpen)
+            {
+                IsOpen.Value = true;
+            }
+            else if (!string.IsNullOrEmpty(mechanismChannel))
+            {
+                ReevaluateStateServer();
+            }
         }
 
         IsOpen.OnValueChanged += OnOpenStateChanged;
@@ -144,8 +166,50 @@ public class DungeonDoor : NetworkBehaviour
 
         if (string.Equals(mechanismChannel, channel, System.StringComparison.OrdinalIgnoreCase))
         {
-            IsOpen.Value = isPulled;
-            Debug.Log($"[DungeonDoor] Door '{doorName}' (Channel: {mechanismChannel}) set to Open={isPulled} by lever.");
+            ReevaluateStateServer();
+        }
+    }
+
+    /// <summary>
+    /// Evaluates whether this door should be open based on all linked levers on its mechanismChannel.
+    /// If requiredLevers == 0, ALL linked levers on the channel must be pulled simultaneously (e.g. 2 of 2).
+    /// If requiredLevers > 0, at least that many levers must be pulled.
+    /// </summary>
+    public void ReevaluateStateServer()
+    {
+        if (!IsServer || string.IsNullOrEmpty(mechanismChannel))
+        {
+            return;
+        }
+
+        bool allLeversOn = DungeonLever.AreAllLeversPulledForChannel(mechanismChannel, out int pulledCount, out int totalCount);
+        int needed = requiredLevers > 0 ? requiredLevers : totalCount;
+        bool shouldOpen = totalCount > 0 && pulledCount >= needed;
+
+        if (IsOpen.Value != shouldOpen)
+        {
+            IsOpen.Value = shouldOpen;
+            Debug.Log($"[DungeonDoor] Door '{doorName}' (Channel: {mechanismChannel}) state updated: {pulledCount}/{totalCount} levers ON (needed {needed}). Open={shouldOpen}");
+        }
+    }
+
+    /// <summary>
+    /// Static notification invoked whenever any lever on the specified channel changes state, spawns, or despawns.
+    /// </summary>
+    public static void EvaluateDoorsForChannel(string channel)
+    {
+        if (string.IsNullOrEmpty(channel))
+        {
+            return;
+        }
+
+        for (int i = 0; i < activeDoors.Count; i++)
+        {
+            DungeonDoor door = activeDoors[i];
+            if (door != null && string.Equals(door.MechanismChannel, channel, System.StringComparison.OrdinalIgnoreCase))
+            {
+                door.ReevaluateStateServer();
+            }
         }
     }
 
@@ -328,8 +392,21 @@ public class DungeonDoor : NetworkBehaviour
         {
             if (!string.IsNullOrEmpty(mechanismChannel))
             {
-                statusText = $"[LOCKED] LINKED TO LEVER: {mechanismChannel.ToUpper()}";
-                textColor = new Color(1f, 0.4f, 0.3f);
+                int pulled = 0;
+                int total = 0;
+                DungeonLever.AreAllLeversPulledForChannel(mechanismChannel, out pulled, out total);
+                int needed = requiredLevers > 0 ? requiredLevers : total;
+
+                if (total > 1)
+                {
+                    statusText = $"[SECURITY LOCK] REQUIRES BOTH LEVERS: ({pulled}/{needed} ACTIVATED)";
+                    textColor = pulled > 0 ? new Color(1f, 0.85f, 0.2f) : new Color(1f, 0.35f, 0.3f);
+                }
+                else
+                {
+                    statusText = $"[LOCKED] LINKED TO LEVER: {mechanismChannel.ToUpper()}";
+                    textColor = new Color(1f, 0.4f, 0.3f);
+                }
             }
             else
             {

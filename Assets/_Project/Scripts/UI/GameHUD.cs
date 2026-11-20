@@ -30,6 +30,22 @@ public class GameHUD : MonoBehaviour
     private bool stylesInitialized;
     private Texture2D solidTexture;
 
+    // Quota celebration banner state
+    private static float quotaCelebrationTimer = 0f;
+    private static ulong quotaCelebrationClientId;
+    private static int quotaCelebrationPointsAdded;
+    private static int quotaCelebrationTotalPoints;
+    private static int quotaCelebrationNextTarget;
+
+    public static void TriggerQuotaCelebration(ulong clientId, int pointsAdded, int totalPoints, int nextTarget)
+    {
+        quotaCelebrationClientId = clientId;
+        quotaCelebrationPointsAdded = pointsAdded;
+        quotaCelebrationTotalPoints = totalPoints;
+        quotaCelebrationNextTarget = nextTarget;
+        quotaCelebrationTimer = 4.5f;
+    }
+
     // Tracks which players escaped and their banked money (populated via RPC from GameManager)
     private readonly Dictionary<ulong, ExtractedRecord> extractedThisRound = new();
     private float fpsTimer = 0f;
@@ -179,12 +195,14 @@ public class GameHUD : MonoBehaviour
         DrawTimer();
         DrawHealth();
         DrawMoney();
+        DrawQuotaHUD();
         DrawHotbar();
         DrawControlsHint();
         DrawConnectionInfo();
         DrawRoundState();
         DrawExtractionBanner();
         DrawScoreboard();
+        DrawQuotaCelebration();
     }
 
     private void DrawLobbyHUD()
@@ -807,6 +825,133 @@ public class GameHUD : MonoBehaviour
         GUI.Label(rect, moneyLabel, moneyStyle);
     }
 
+    private void DrawQuotaHUD()
+    {
+        PlayerWallet wallet = FindLocalPlayerWallet();
+        if (wallet == null)
+        {
+            return;
+        }
+
+        float boxX = 20f;
+        float boxY = Screen.height - 128f;
+        float boxW = 240f;
+        float boxH = 38f;
+
+        int progress = wallet.QuotaProgress.Value;
+        int target = wallet.QuotaTarget.Value > 0 ? wallet.QuotaTarget.Value : 100;
+        int points = wallet.QuotaPoints.Value;
+        int runMoney = wallet.RunMoney.Value;
+
+        bool inLobby = GameManager.Instance != null &&
+                       GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby;
+
+        // Dark card background & subtle border
+        DrawSolidRect(new Rect(boxX - 2f, boxY - 2f, boxW + 4f, boxH + 4f), new Color(0.04f, 0.06f, 0.10f, 0.88f));
+        DrawSolidRect(new Rect(boxX, boxY, boxW, boxH), new Color(0.10f, 0.14f, 0.20f, 0.88f));
+
+        GUIStyle quotaLabelStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 12,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.UpperLeft
+        };
+
+        GUIStyle pointsBadgeStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 13,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.UpperRight
+        };
+        pointsBadgeStyle.normal.textColor = new Color(1f, 0.85f, 0.2f); // Golden Star
+
+        int projectedTotal = inLobby ? progress : progress + runMoney;
+        bool willMeetQuota = projectedTotal >= target;
+
+        if (willMeetQuota && !inLobby)
+        {
+            quotaLabelStyle.normal.textColor = new Color(0.25f, 1f, 0.35f);
+            GUI.Label(new Rect(boxX + 6f, boxY + 2f, 160f, 18f), $"QUOTA: ${progress} (+${runMoney}) / ${target}", quotaLabelStyle);
+        }
+        else
+        {
+            quotaLabelStyle.normal.textColor = new Color(0.75f, 0.88f, 1f);
+            string extraText = (!inLobby && runMoney > 0) ? $" (+${runMoney})" : "";
+            GUI.Label(new Rect(boxX + 6f, boxY + 2f, 160f, 18f), $"QUOTA: ${progress}{extraText} / ${target}", quotaLabelStyle);
+        }
+
+        GUI.Label(new Rect(boxX + boxW - 85f, boxY + 2f, 79f, 18f), $"★ {points} PTS", pointsBadgeStyle);
+
+        // Progress bar track & fill
+        float barX = boxX + 6f;
+        float barY = boxY + 22f;
+        float barW = boxW - 12f;
+        float barH = 8f;
+
+        DrawSolidRect(new Rect(barX, barY, barW, barH), new Color(0.18f, 0.22f, 0.30f, 0.9f));
+
+        float basePct = Mathf.Clamp01((float)progress / target);
+        float projectedPct = Mathf.Clamp01((float)projectedTotal / target);
+
+        // Projected progress fill (faint cyan/green)
+        if (projectedPct > basePct)
+        {
+            Color projColor = willMeetQuota ? new Color(0.2f, 0.85f, 0.3f, 0.55f) : new Color(0.2f, 0.6f, 0.9f, 0.45f);
+            DrawSolidRect(new Rect(barX, barY, barW * projectedPct, barH), projColor);
+        }
+
+        // Secured progress fill
+        if (basePct > 0f)
+        {
+            Color fillColor = new Color(1f, 0.82f, 0.15f);
+            DrawSolidRect(new Rect(barX, barY, barW * basePct, barH), fillColor);
+        }
+    }
+
+    private void DrawQuotaCelebration()
+    {
+        if (quotaCelebrationTimer <= 0f)
+        {
+            return;
+        }
+
+        quotaCelebrationTimer -= Time.deltaTime;
+
+        bool isLocal = (NetworkManager.Singleton != null && quotaCelebrationClientId == NetworkManager.Singleton.LocalClientId);
+        string title = isLocal ? "★ QUOTA COMPLETED! ★" : $"PLAYER {quotaCelebrationClientId + 1} MET QUOTA!";
+        string subtitle = isLocal
+            ? $"+{quotaCelebrationPointsAdded} POINT! (Total: {quotaCelebrationTotalPoints} PTS)  |  Next Quota: ${quotaCelebrationNextTarget}"
+            : $"Earned +{quotaCelebrationPointsAdded} Point! (Total: {quotaCelebrationTotalPoints} PTS)";
+
+        float bannerW = 600f;
+        float bannerH = 75f;
+        float bannerX = (Screen.width - bannerW) * 0.5f;
+        float bannerY = 95f;
+
+        // Dark banner backdrop with gold accent
+        DrawSolidRect(new Rect(bannerX, bannerY, bannerW, bannerH), new Color(0.04f, 0.07f, 0.12f, 0.94f));
+        DrawSolidRect(new Rect(bannerX, bannerY, bannerW, 3f), new Color(1f, 0.85f, 0.1f, 0.95f));
+        DrawSolidRect(new Rect(bannerX, bannerY + bannerH - 2f, bannerW, 2f), new Color(1f, 0.85f, 0.1f, 0.6f));
+
+        GUIStyle titleStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 22,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        titleStyle.normal.textColor = new Color(1f, 0.88f, 0.15f);
+        GUI.Label(new Rect(bannerX, bannerY + 8f, bannerW, 30f), title, titleStyle);
+
+        GUIStyle subStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 15,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        subStyle.normal.textColor = Color.white;
+        GUI.Label(new Rect(bannerX, bannerY + 40f, bannerW, 24f), subtitle, subStyle);
+    }
+
     private void DrawConnectionInfo()
     {
         if (NetworkManager.Singleton == null)
@@ -962,6 +1107,9 @@ public class GameHUD : MonoBehaviour
 
                     PlayerWallet wallet = client.PlayerObject.GetComponent<PlayerWallet>();
                     int bank = wallet != null ? wallet.BankedMoney.Value : 0;
+                    int points = wallet != null ? wallet.QuotaPoints.Value : 0;
+                    int qProg = wallet != null ? wallet.QuotaProgress.Value : 0;
+                    int qTarg = wallet != null ? wallet.QuotaTarget.Value : 100;
 
                     float rowY = startY + i * rowHeight;
 
@@ -975,7 +1123,7 @@ public class GameHUD : MonoBehaviour
                         DrawSolidRect(new Rect(cardX + 8f, rowY, cardWidth - 16f, rowHeight - 4f), new Color(1f, 1f, 1f, 0.03f));
                     }
 
-                    string playerName = isLocal ? $"Player {cid + 1} (You)" : $"Player {cid + 1}";
+                    string playerName = isLocal ? $"Player {cid + 1} (You) [★{points}]" : $"Player {cid + 1} [★{points}]";
                     leftStyle.normal.textColor = isLocal ? new Color(0.4f, 0.85f, 1f) : Color.white;
                     GUI.Label(new Rect(cardX + 24f, rowY, 220f, rowHeight - 4f), playerName, leftStyle);
 
@@ -992,7 +1140,7 @@ public class GameHUD : MonoBehaviour
                     }
 
                     rightStyle.normal.textColor = new Color(1f, 0.85f, 0.2f);
-                    GUI.Label(new Rect(cardX + 484f, rowY, 212f, rowHeight - 4f), $"Total: ${bank}", rightStyle);
+                    GUI.Label(new Rect(cardX + 484f, rowY, 212f, rowHeight - 4f), $"${bank} (Q: {qProg}/{qTarg})", rightStyle);
 
                     i++;
                 }
@@ -1091,6 +1239,7 @@ public class GameHUD : MonoBehaviour
 
             PlayerWallet wallet = client.PlayerObject.GetComponent<PlayerWallet>();
             int runMoney = wallet != null ? wallet.RunMoney.Value : 0;
+            int points = wallet != null ? wallet.QuotaPoints.Value : 0;
 
             bool escaped = extractedThisRound.ContainsKey(client.ClientId);
             string escapedTag = escaped ? " ✓" : "";
@@ -1100,8 +1249,8 @@ public class GameHUD : MonoBehaviour
                 ? new Color(0.2f, 1f, 0.2f)
                 : (isLocal ? new Color(1f, 0.85f, 0f) : Color.white);
 
-            GUI.Label(new Rect(x, y + i * 24f, 180f, 22f),
-                $"P{client.ClientId + 1}: ${runMoney}{escapedTag}", sbStyle);
+            GUI.Label(new Rect(x - 50f, y + i * 24f, 230f, 22f),
+                $"P{client.ClientId + 1}: ${runMoney} [★{points}]{escapedTag}", sbStyle);
             i++;
         }
     }
