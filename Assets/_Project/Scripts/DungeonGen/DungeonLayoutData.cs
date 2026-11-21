@@ -148,7 +148,7 @@ public class RoomLayoutData
 /// <summary>
 /// ScriptableObject asset defining a complete dungeon layout.
 /// Used by level designers and developers to create and tune maps, rooms,
-/// doorways, unlockable doors, levers, enemies, coins, and extraction zones
+/// doorways, unlockable doors, levers, enemies, and extraction zones
 /// without writing any code.
 /// </summary>
 [CreateAssetMenu(fileName = "NewDungeonLayout", menuName = "Dungeon Crawler/Dungeon Layout")]
@@ -326,41 +326,26 @@ public class DungeonLayoutData : ScriptableObject
         main.playerSpawns.Add(new Vector3(-3f, 1f, -3f));
         main.playerSpawns.Add(new Vector3(3f, 1f, -3f));
         main.playerSpawns.Add(new Vector3(0f, 1f, 3f));
-        main.coinSpawns.Add(new Vector3(-5f, 0.8f, 5f));
-        main.coinSpawns.Add(new Vector3(5f, 0.8f, 5f));
-        main.coinSpawns.Add(new Vector3(0f, 0.8f, -5f));
-        main.coinSpawns.Add(new Vector3(-5f, 0.8f, -5f));
-        main.coinSpawns.Add(new Vector3(4f, 0.8f, -4f));
 
         // 2. North Corridor
         RoomLayoutData nCorr = layout.AddRoom("NorthCorridor", "North Corridor", new Vector3(0f, 0f, 15f), new Vector3(4f, 4f, 14f));
         nCorr.doorways.Add(new DoorwayDefinition(WallSide.South, 3.2f, 0f, false, ""));
         nCorr.doorways.Add(new DoorwayDefinition(WallSide.North, 3.2f, 0f, false, ""));
-        nCorr.coinSpawns.Add(new Vector3(1f, 0.8f, -2f));
-        nCorr.coinSpawns.Add(new Vector3(-1f, 0.8f, 2f));
         nCorr.enemySpawns.Add(new EnemyPlacementData(new Vector3(0f, 0.5f, 0f), "basic_abnormality"));
 
         // 3. North Storage
         RoomLayoutData nStore = layout.AddRoom("NorthStorage", "North Storage", new Vector3(0f, 0f, 26f), new Vector3(10f, 4f, 8f));
         nStore.doorways.Add(new DoorwayDefinition(WallSide.South, 3.2f, 0f, false, ""));
-        nStore.coinSpawns.Add(new Vector3(-3f, 0.8f, -1f));
-        nStore.coinSpawns.Add(new Vector3(3f, 0.8f, 1f));
-        nStore.coinSpawns.Add(new Vector3(0f, 0.8f, 3f));
-        nStore.coinSpawns.Add(new Vector3(-4f, 0.8f, 1f));
         nStore.enemySpawns.Add(new EnemyPlacementData(new Vector3(0f, 0.5f, 0f), "basic_abnormality"));
 
         // 4. East Corridor
         RoomLayoutData eCorr = layout.AddRoom("EastCorridor", "East Corridor", new Vector3(15f, 0f, 0f), new Vector3(14f, 4f, 4f));
         eCorr.doorways.Add(new DoorwayDefinition(WallSide.West, 3.2f, 0f, false, ""));
         eCorr.doorways.Add(new DoorwayDefinition(WallSide.East, 3.2f, 0f, false, ""));
-        eCorr.coinSpawns.Add(new Vector3(-2f, 0.8f, 0f));
-        eCorr.coinSpawns.Add(new Vector3(2f, 0.8f, 1f));
 
         // 5. East Chamber
         RoomLayoutData eChamb = layout.AddRoom("EastChamber", "East Extraction Chamber", new Vector3(26f, 0f, 0f), new Vector3(8f, 4f, 10f));
         eChamb.doorways.Add(new DoorwayDefinition(WallSide.West, 3.2f, 0f, false, ""));
-        eChamb.coinSpawns.Add(new Vector3(-1f, 0.8f, -3f));
-        eChamb.coinSpawns.Add(new Vector3(1f, 0.8f, 3f));
         eChamb.enemySpawns.Add(new EnemyPlacementData(new Vector3(0f, 0.5f, 3f), "basic_abnormality"));
         eChamb.hasExtractionPoint = true;
         eChamb.extractionLocalPosition = Vector3.zero;
@@ -373,9 +358,6 @@ public class DungeonLayoutData : ScriptableObject
         // 7. West Dead End
         RoomLayoutData wDead = layout.AddRoom("WestDeadEnd", "West Dead End", new Vector3(-23f, 0f, 0f), new Vector3(6f, 4f, 6f));
         wDead.doorways.Add(new DoorwayDefinition(WallSide.East, 3.2f, 0f, false, ""));
-        wDead.coinSpawns.Add(new Vector3(0f, 0.8f, 0f));
-        wDead.coinSpawns.Add(new Vector3(2f, 0.8f, 2f));
-        wDead.coinSpawns.Add(new Vector3(-1f, 0.8f, -2f));
         wDead.enemySpawns.Add(new EnemyPlacementData(new Vector3(0f, 0.5f, 0f), "basic_abnormality"));
 
         UnityEditor.AssetDatabase.CreateAsset(layout, assetPath);

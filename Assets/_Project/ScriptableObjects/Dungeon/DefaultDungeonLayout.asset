@@ -41,9 +41,7 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
-    coinSpawns:
-    - {x: 0, y: 0.4, z: -3}
-    - {x: 0, y: 0.4, z: 3}
+    coinSpawns: []
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
@@ -66,46 +64,7 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
-    coinSpawns:
-    - {x: -11, y: 0.5, z: 4}
-    - {x: -6, y: 0.5, z: 2}
-    - {x: -12, y: 0.5, z: -2}
-    - {x: -3, y: 0.5, z: -2}
-    - {x: 1, y: 0.5, z: 0}
-    - {x: -13, y: 0.5, z: -4}
-    - {x: -7, y: 0.5, z: -7}
-    - {x: 5, y: 0.5, z: 9}
-    - {x: -9, y: 0.5, z: -7}
-    - {x: 1, y: 0.5, z: -4}
-    - {x: 6, y: 0.5, z: -6}
-    - {x: -2, y: 0.5, z: -7}
-    - {x: -6, y: 0.5, z: -1}
-    - {x: 4, y: 0.5, z: 6}
-    - {x: -5, y: 0.5, z: 2}
-    - {x: -3, y: 0.5, z: 5}
-    - {x: -9, y: 0.5, z: 0}
-    - {x: -11, y: 0.5, z: 11}
-    - {x: -5, y: 0.5, z: 7}
-    - {x: 6, y: 0.5, z: 12}
-    - {x: -9, y: 0.5, z: -2}
-    - {x: 1, y: 0.5, z: -1}
-    - {x: -15, y: 0.5, z: 5}
-    - {x: -10, y: 0.5, z: -1}
-    - {x: -12, y: 0.5, z: -5}
-    - {x: -10, y: 0.5, z: 1}
-    - {x: 2, y: 0.5, z: 4}
-    - {x: -9, y: 0.5, z: 1}
-    - {x: -5, y: 0.5, z: -5}
-    - {x: 3, y: 0.5, z: -1}
-    - {x: -9, y: 0.5, z: 4}
-    - {x: -7, y: 0.5, z: -3}
-    - {x: -2, y: 0.5, z: 13}
-    - {x: -10, y: 0.5, z: 11}
-    - {x: -3, y: 0.5, z: -1}
-    - {x: -12, y: 0.5, z: 10}
-    - {x: -8, y: 0.5, z: 2}
-    - {x: 2, y: 0.5, z: -4}
-    - {x: 9, y: 0.5, z: -8}
+    coinSpawns: []
     enemySpawns:
     - localPosition: {x: -7, y: 0.59999996, z: -11}
       enemyId: scrap_scavenger
@@ -142,8 +101,7 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
-    coinSpawns:
-    - {x: -4.918, y: 3.8989725, z: -3}
+    coinSpawns: []
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
@@ -172,9 +130,7 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
-    coinSpawns:
-    - {x: 0, y: 0.4, z: 3}
-    - {x: 0, y: 0.4, z: -3}
+    coinSpawns: []
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
@@ -238,11 +194,7 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
-    coinSpawns:
-    - {x: 3.000001, y: 0.4, z: 3.000001}
-    - {x: -3.000001, y: 0.4, z: -3.000001}
-    - {x: -3, y: 0.4, z: 3.000002}
-    - {x: 3, y: 0.4, z: -3.000002}
+    coinSpawns: []
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 1
@@ -271,12 +223,7 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
-    coinSpawns:
-    - {x: 2.074, y: 0.5, z: 3}
-    - {x: -0.926, y: 0.5, z: -4}
-    - {x: -1.926, y: 0.5, z: -2}
-    - {x: -0.926, y: 0.5, z: 2}
-    - {x: 2.074, y: 0.5, z: -2}
+    coinSpawns: []
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
@@ -305,9 +252,7 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
-    coinSpawns:
-    - {x: -0.00000026226832, y: 0.4, z: 3}
-    - {x: 0.00000026226832, y: 0.4, z: -3}
+    coinSpawns: []
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
@@ -351,10 +296,7 @@ MonoBehaviour:
       mechanismChannel: Vault_63
       startsOpen: 0
     props: []
-    coinSpawns:
-    - {x: 0, y: 0.4, z: 1}
-    - {x: -1.5, y: 0.4, z: 2}
-    - {x: 1.5, y: 0.4, z: 2}
+    coinSpawns: []
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
@@ -397,10 +339,7 @@ MonoBehaviour:
       localEulerAngles: {x: -0, y: 0, z: 0}
       localScale: {x: 0.8, y: 4, z: 0.8}
       color: {r: 0.34999996, g: 0.31999996, b: 0.29999998, a: 1}
-    coinSpawns:
-    - {x: 3.0000005, y: 0.4, z: 0.00000047683716}
-    - {x: -0.00000047683716, y: 0.4, z: 3.5000005}
-    - {x: 0.00000047683716, y: 0.4, z: -3.5000005}
+    coinSpawns: []
     enemySpawns:
     - localPosition: {x: -2.0000002, y: 0.5, z: -0.00000023841858}
       enemyId: basic_abnormality

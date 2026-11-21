@@ -202,8 +202,7 @@ public class PlayerWallet : NetworkBehaviour
         }
 
         RunMoney.Value = 0;
-        Coin.SpawnCoinDrops(origin, amountToDrop);
-        Debug.Log($"[PlayerWallet] Player {OwnerClientId} died and dropped ${amountToDrop} run gold.");
+        Debug.Log($"[PlayerWallet] Player {OwnerClientId} died and lost ${amountToDrop} run money.");
         return amountToDrop;
     }
 

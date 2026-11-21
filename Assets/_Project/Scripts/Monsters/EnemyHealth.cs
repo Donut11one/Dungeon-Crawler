@@ -307,13 +307,6 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
             }
         }
 
-        // Fallback: If no inspector drops assigned, grab CoinPrefab from DungeonBuilder
-        DungeonBuilder dungeonBuilder = FindAnyObjectByType<DungeonBuilder>();
-        if (candidates.Count == 0 && dungeonBuilder != null && dungeonBuilder.CoinPrefab != null)
-        {
-            candidates.Add(dungeonBuilder.CoinPrefab);
-        }
-
         if (candidates.Count == 0)
         {
             return;
@@ -339,12 +332,6 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
             {
                 Vector3 impulse = new Vector3(circle.x, 1.5f, circle.y).normalized * dropScatterForce;
                 rb.AddForce(impulse, ForceMode.Impulse);
-            }
-
-            // If coin, register with DungeonBuilder for round lifecycle cleanup
-            if (dungeonBuilder != null && droppedObj.GetComponent<Coin>() != null)
-            {
-                dungeonBuilder.TrackSpawnedCoin(droppedObj);
             }
         }
     }

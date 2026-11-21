@@ -29,8 +29,13 @@ public class BasicEnemyAI : NetworkBehaviour
     [SerializeField] private float aggroRange = 12f;
     [SerializeField] private float loseTargetRange = 18f;
     [SerializeField] private float directProximityRange = 4.5f;
+    [SerializeField] private float visionAngle = 180f;
     [SerializeField] private float chaseSpeed = 4.2f;
     [SerializeField] private float wanderSpeed = 2.2f;
+
+    [Header("Swarm & Pack Behavior")]
+    [SerializeField] private bool isSwarmAlert = false;
+    [SerializeField] private float swarmAlertRadius = 18f;
 
     [Header("Attack & Cooldown")]
     [SerializeField] private float attackRange = 2.2f;
@@ -142,8 +147,15 @@ public class BasicEnemyAI : NetworkBehaviour
         }
     }
 
+    private static readonly List<BasicEnemyAI> activeEnemies = new List<BasicEnemyAI>();
+
     public override void OnNetworkSpawn()
     {
+        if (!activeEnemies.Contains(this))
+        {
+            activeEnemies.Add(this);
+        }
+
         CurrentCombatState.OnValueChanged += OnCombatStateChanged;
         IsStunned.OnValueChanged += OnStunStateChanged;
         IsHeavyWindup.OnValueChanged += OnHeavyWindupChanged;
@@ -157,6 +169,21 @@ public class BasicEnemyAI : NetworkBehaviour
         CurrentCombatState.OnValueChanged -= OnCombatStateChanged;
         IsStunned.OnValueChanged -= OnStunStateChanged;
         IsHeavyWindup.OnValueChanged -= OnHeavyWindupChanged;
+
+        if (activeEnemies.Contains(this))
+        {
+            activeEnemies.Remove(this);
+        }
+    }
+
+    public override void OnDestroy()
+    {
+        base.OnDestroy();
+
+        if (activeEnemies.Contains(this))
+        {
+            activeEnemies.Remove(this);
+        }
     }
 
     private void OnStunStateChanged(bool previous, bool current)
@@ -252,6 +279,12 @@ public class BasicEnemyAI : NetworkBehaviour
         aggroRange = data.aggroRange;
         loseTargetRange = data.loseTargetRange;
         directProximityRange = data.directProximityRange;
+        visionAngle = data.visionAngle > 0f ? data.visionAngle : 180f;
+        wanderRadius = data.wanderRadius > 0f ? data.wanderRadius : 7f;
+        wanderInterval = data.wanderInterval > 0f ? data.wanderInterval : 3.5f;
+        isSwarmAlert = data.isSwarmAlert;
+        swarmAlertRadius = data.swarmAlertRadius > 0f ? data.swarmAlertRadius : 18f;
+
         attackRange = data.attackRange;
         attackDamage = data.attackDamage;
         attackCooldown = data.attackCooldown;
@@ -262,9 +295,25 @@ public class BasicEnemyAI : NetworkBehaviour
         idleBodyColor = data.GetBodyColor();
         idleEyeColor = data.GetEyeColor();
 
-        if (agent != null && agent.enabled)
+        float scale = data.modelScale > 0.1f ? data.modelScale : 1f;
+        transform.localScale = Vector3.one * scale;
+
+        if (agent != null)
         {
-            agent.speed = wanderSpeed;
+            agent.radius = 0.45f * scale;
+            agent.height = 1.8f * scale;
+            if (agent.enabled)
+            {
+                agent.speed = wanderSpeed;
+            }
+        }
+
+        CapsuleCollider col = GetComponent<CapsuleCollider>();
+        if (col != null)
+        {
+            col.radius = 0.45f * scale;
+            col.height = 1.8f * scale;
+            col.center = new Vector3(0f, 0.9f * scale, 0f);
         }
 
         UpdateStateVisuals(CurrentCombatState.Value);
@@ -430,6 +479,7 @@ public class BasicEnemyAI : NetworkBehaviour
             if (closestPlayer != null)
             {
                 currentTarget = closestPlayer;
+                OnAggroTriggered(closestPlayer);
             }
         }
     }
@@ -443,7 +493,7 @@ public class BasicEnemyAI : NetworkBehaviour
 
         Transform closest = null;
         float closestDist = float.MaxValue;
-        Vector3 eyePos = transform.position + Vector3.up * 1.2f;
+        Vector3 eyePos = transform.position + Vector3.up * (1.2f * transform.localScale.y);
 
         foreach (NetworkClient client in NetworkManager.Singleton.ConnectedClientsList)
         {
@@ -476,11 +526,29 @@ public class BasicEnemyAI : NetworkBehaviour
             // Direct proximity hearing: instantly detect if within directProximityRange
             bool detected = dist <= directProximityRange;
 
-            // Otherwise, require line of sight (no solid walls blocking vision)
+            // Otherwise, require line of sight AND forward field of view (if visionAngle < 360)
             if (!detected)
             {
                 Vector3 playerTargetPos = playerT.position + Vector3.up * 1.0f;
                 Vector3 toPlayer = playerTargetPos - eyePos;
+
+                if (visionAngle < 360f)
+                {
+                    Vector3 forward = transform.forward;
+                    forward.y = 0f;
+                    Vector3 flatToPlayer = toPlayer;
+                    flatToPlayer.y = 0f;
+
+                    if (flatToPlayer.sqrMagnitude > 0.001f)
+                    {
+                        float angle = Vector3.Angle(forward, flatToPlayer.normalized);
+                        if (angle > visionAngle * 0.5f)
+                        {
+                            continue;
+                        }
+                    }
+                }
+
                 if (!Physics.Raycast(eyePos, toPlayer.normalized, dist, ~0, QueryTriggerInteraction.Ignore))
                 {
                     detected = true;
@@ -521,6 +589,88 @@ public class BasicEnemyAI : NetworkBehaviour
         if (closest != null)
         {
             currentTarget = closest;
+            SetCombatState(CombatState.Chasing);
+            OnAggroTriggered(closest);
+        }
+    }
+
+    /// <summary>
+    /// Handles aggro propagation based on archetype:
+    /// - Swarms (isSwarmAlert = true): Shrieks and alerts all nearby allies of the same type.
+    /// - Solo Stalkers (isSwarmAlert = false): Keeps completely silent and fights alone; nearby allies do not aggro.
+    /// </summary>
+    private void OnAggroTriggered(Transform target)
+    {
+        if (!IsServer || target == null)
+        {
+            return;
+        }
+
+        if (isSwarmAlert)
+        {
+            AlertSwarmMembers(target);
+        }
+    }
+
+    private void AlertSwarmMembers(Transform target)
+    {
+        if (!isSwarmAlert || target == null)
+        {
+            return;
+        }
+
+        string myEnemyId = enemyHealth != null ? enemyHealth.EnemyId.Value.ToString() : "";
+
+        for (int i = 0; i < activeEnemies.Count; i++)
+        {
+            BasicEnemyAI ally = activeEnemies[i];
+            if (ally == null || ally == this)
+            {
+                continue;
+            }
+
+            if (ally.enemyHealth != null && ally.enemyHealth.IsDead.Value)
+            {
+                continue;
+            }
+
+            if (!ally.isSwarmAlert)
+            {
+                continue;
+            }
+
+            string allyEnemyId = ally.enemyHealth != null ? ally.enemyHealth.EnemyId.Value.ToString() : "";
+            if (!string.Equals(myEnemyId, allyEnemyId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            float dist = Vector3.Distance(transform.position, ally.transform.position);
+            if (dist <= swarmAlertRadius)
+            {
+                ally.JoinSwarmAggro(target);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Called when an allied swarm member rallies this unit to attack a player.
+    /// </summary>
+    public void JoinSwarmAggro(Transform target)
+    {
+        if (!IsServer || target == null)
+        {
+            return;
+        }
+
+        if (enemyHealth != null && enemyHealth.IsDead.Value)
+        {
+            return;
+        }
+
+        if (currentTarget == null || CurrentCombatState.Value == CombatState.Idle)
+        {
+            currentTarget = target;
             SetCombatState(CombatState.Chasing);
         }
     }
@@ -707,16 +857,53 @@ public class BasicEnemyAI : NetworkBehaviour
         agent.speed = wanderSpeed;
 
         wanderTimer -= Time.deltaTime;
-        if (wanderTimer <= 0f)
+        bool reachedDest = !agent.pathPending && agent.hasPath && agent.remainingDistance < 1.2f;
+
+        if (wanderTimer <= 0f || reachedDest || !agent.hasPath)
         {
             wanderTimer = wanderInterval;
 
-            Vector3 randomDir = Random.insideUnitSphere * wanderRadius;
-            randomDir += transform.position;
+            Vector3 targetPoint = Vector3.zero;
+            bool foundPoint = false;
 
-            if (NavMesh.SamplePosition(randomDir, out NavMeshHit hit, wanderRadius, NavMesh.AllAreas))
+            // For hallway wanderers with large wander radius (e.g. 20-25m),
+            // probe forward corridor directions to traverse halls smoothly
+            if (wanderRadius >= 15f)
             {
-                agent.SetDestination(hit.position);
+                for (int attempt = 0; attempt < 4; attempt++)
+                {
+                    float angleOffset = (attempt - 1.5f) * 45f;
+                    Vector3 dir = Quaternion.Euler(0f, angleOffset, 0f) * transform.forward;
+                    Vector3 testPos = transform.position + dir * Random.Range(wanderRadius * 0.5f, wanderRadius);
+
+                    if (NavMesh.SamplePosition(testPos, out NavMeshHit navHit, 6f, NavMesh.AllAreas))
+                    {
+                        NavMeshPath testPath = new NavMeshPath();
+                        if (agent.CalculatePath(navHit.position, testPath) && testPath.status == NavMeshPathStatus.PathComplete)
+                        {
+                            targetPoint = navHit.position;
+                            foundPoint = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!foundPoint)
+            {
+                Vector3 randomDir = Random.insideUnitSphere * wanderRadius;
+                randomDir += transform.position;
+
+                if (NavMesh.SamplePosition(randomDir, out NavMeshHit hit, wanderRadius, NavMesh.AllAreas))
+                {
+                    targetPoint = hit.position;
+                    foundPoint = true;
+                }
+            }
+
+            if (foundPoint)
+            {
+                agent.SetDestination(targetPoint);
             }
         }
     }

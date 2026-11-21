@@ -25,6 +25,15 @@ public class EnemyData
     public string bodyColorHex = "#B32626";
     public string eyeColorHex = "#FFEE33";
 
+    [Header("Behavior & Pack Dynamics")]
+    public float visionAngle = 180f;
+    public float wanderRadius = 8f;
+    public float wanderInterval = 3.5f;
+    public bool isSwarmAlert = false;
+    public float swarmAlertRadius = 18f;
+    public int packSpawnCount = 1;
+    public float modelScale = 1.0f;
+
     public Color GetBodyColor()
     {
         if (!string.IsNullOrEmpty(bodyColorHex) && ColorUtility.TryParseHtmlString(bodyColorHex, out Color color))

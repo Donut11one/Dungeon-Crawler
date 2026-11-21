@@ -27,7 +27,7 @@ public enum DungeonMapSource
 /// Modular dungeon builder supporting both runtime procedural assembly and
 /// data-driven layout assets (DungeonLayoutData) authored by level designers.
 /// Assembles rooms, doorway openings, physical security blast doors, interactive levers,
-/// coins, monster spawns, and extraction pads.
+/// monster spawns, and extraction pads.
 /// Synchronizes the selected layout across all connected players.
 /// </summary>
 public class DungeonBuilder : NetworkBehaviour
@@ -49,13 +49,11 @@ public class DungeonBuilder : NetworkBehaviour
     [SerializeField] private float doorWidth = 3.2f;
 
     [Header("Prefabs")]
-    [SerializeField] private GameObject coinPrefab;
     [SerializeField] private GameObject enemyPrefab;
     [SerializeField] private GameObject leverPrefab;
     [SerializeField] private GameObject doorPrefab;
 
     [Header("Default Fallback Quantities")]
-    [SerializeField] private int coinCount = 15;
     [SerializeField] private int enemyCount = 2;
 
     [Header("Colors")]
@@ -76,11 +74,9 @@ public class DungeonBuilder : NetworkBehaviour
     private GameObject extractionPointObj;
     private DungeonLayoutData currentResolvedLayout;
 
-    private readonly List<Vector3> coinSpawnPoints = new();
     private readonly List<Vector3> enemySpawnPoints = new();
     private readonly List<string> enemySpawnArchetypes = new();
     private readonly List<Vector3> playerSpawnPoints = new();
-    private readonly List<GameObject> spawnedCoins = new();
     private readonly List<GameObject> spawnedEnemies = new();
     private readonly List<DungeonRoom> dungeonRooms = new();
 
@@ -125,14 +121,6 @@ public class DungeonBuilder : NetworkBehaviour
         }
     }
 
-    public GameObject CoinPrefab
-    {
-        get
-        {
-            return coinPrefab;
-        }
-    }
-
     public GameObject LeverPrefab
     {
         get
@@ -154,14 +142,6 @@ public class DungeonBuilder : NetworkBehaviour
         get
         {
             return dungeonRooms;
-        }
-    }
-
-    public void TrackSpawnedCoin(GameObject coin)
-    {
-        if (coin != null && !spawnedCoins.Contains(coin))
-        {
-            spawnedCoins.Add(coin);
         }
     }
 
@@ -232,7 +212,6 @@ public class DungeonBuilder : NetworkBehaviour
     // ── Unity / NGO lifecycle ────────────────────────────────────────────────
     private void Awake()
     {
-        EnsureCoinPrefab();
         EnsureLeverPrefab();
         EnsureDoorPrefab();
         EnsureEnemyPrefab();
@@ -260,7 +239,6 @@ public class DungeonBuilder : NetworkBehaviour
             {
                 navSurface.BuildNavMesh();
             }
-            SpawnCoins();
             SpawnEnemies();
             SpawnModularFeatures();
         }
@@ -309,30 +287,6 @@ public class DungeonBuilder : NetworkBehaviour
 
         BuildDungeon();
         CreateExtractionPoint();
-    }
-
-    private void EnsureCoinPrefab()
-    {
-        if (coinPrefab != null)
-        {
-            return;
-        }
-
-#if UNITY_EDITOR
-        coinPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Items/CoinPrefab.prefab");
-#endif
-
-        if (coinPrefab == null && NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
-        {
-            foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
-            {
-                if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<Coin>() != null)
-                {
-                    coinPrefab = netPrefab.Prefab;
-                    break;
-                }
-            }
-        }
     }
 
     private void EnsureLeverPrefab()
@@ -410,7 +364,6 @@ public class DungeonBuilder : NetworkBehaviour
     // ── Registration ─────────────────────────────────────────────────────────
     private void RegisterPrefabs()
     {
-        EnsureCoinPrefab();
         EnsureLeverPrefab();
         EnsureDoorPrefab();
         EnsureEnemyPrefab();
@@ -418,11 +371,6 @@ public class DungeonBuilder : NetworkBehaviour
         if (NetworkManager.Singleton == null || NetworkManager.Singleton.NetworkConfig == null)
         {
             return;
-        }
-
-        if (coinPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(coinPrefab))
-        {
-            NetworkManager.Singleton.AddNetworkPrefab(coinPrefab);
         }
 
         if (enemyPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(enemyPrefab))
@@ -448,7 +396,6 @@ public class DungeonBuilder : NetworkBehaviour
 
         dungeonRoot = new GameObject("Dungeon");
         dungeonRooms.Clear();
-        coinSpawnPoints.Clear();
         enemySpawnPoints.Clear();
         enemySpawnArchetypes.Clear();
         playerSpawnPoints.Clear();
@@ -579,12 +526,6 @@ public class DungeonBuilder : NetworkBehaviour
                 }
             }
 
-            // Coin spawns transformed by room transform
-            for (int c = 0; c < roomData.coinSpawns.Count; c++)
-            {
-                coinSpawnPoints.Add(room.transform.TransformPoint(roomData.coinSpawns[c]));
-            }
-
             // Enemy spawns transformed by room transform
             for (int e = 0; e < roomData.enemySpawns.Count; e++)
             {
@@ -610,7 +551,7 @@ public class DungeonBuilder : NetworkBehaviour
     /// <summary>
     /// Builds the default facility dungeon with connected corridors,
     /// a security blast door on the North Doorway linked to the Main Hall lever,
-    /// coins, enemies, and an extraction point.
+    /// enemies, and an extraction point.
     /// </summary>
     private void BuildDefaultLayout()
     {
@@ -644,13 +585,6 @@ public class DungeonBuilder : NetworkBehaviour
         playerSpawnPoints.Add(new Vector3(-3f, 1f, -3f));
         playerSpawnPoints.Add(new Vector3(3f, 1f, -3f));
         playerSpawnPoints.Add(new Vector3(0f, 1f, 3f));
-        Coins(
-            new Vector3(-5f, 0.8f, 5f),
-            new Vector3(5f, 0.8f, 5f),
-            new Vector3(0f, 0.8f, -5f),
-            new Vector3(-5f, 0.8f, -5f),
-            new Vector3(4f, 0.8f, -4f)
-        );
 
         // ── NORTH CORRIDOR (4 × 14, centre 0,0,15) ──────────────────────────
         Room(
@@ -665,10 +599,6 @@ public class DungeonBuilder : NetworkBehaviour
             Door.N(dw)
         );
 
-        Coins(
-            new Vector3(1f, 0.8f, 13f),
-            new Vector3(-1f, 0.8f, 17f)
-        );
         enemySpawnPoints.Add(new Vector3(0f, 0.5f, 15f));
         enemySpawnArchetypes.Add("");
 
@@ -684,12 +614,6 @@ public class DungeonBuilder : NetworkBehaviour
             Door.S(dw)
         );
 
-        Coins(
-            new Vector3(-3f, 0.8f, 25f),
-            new Vector3(3f, 0.8f, 27f),
-            new Vector3(0f, 0.8f, 29f),
-            new Vector3(-4f, 0.8f, 27f)
-        );
         enemySpawnPoints.Add(new Vector3(0f, 0.5f, 26f));
         enemySpawnArchetypes.Add("");
 
@@ -706,11 +630,6 @@ public class DungeonBuilder : NetworkBehaviour
             Door.E(dw)
         );
 
-        Coins(
-            new Vector3(13f, 0.8f, 0f),
-            new Vector3(17f, 0.8f, 1f)
-        );
-
         // ── EAST CHAMBER (8 × 10, centre 26,0,0) ────────────────────────────
         Room(
             new Vector3(26f, 0f, 0f),
@@ -723,10 +642,6 @@ public class DungeonBuilder : NetworkBehaviour
             Door.W(dw)
         );
 
-        Coins(
-            new Vector3(25f, 0.8f, -3f),
-            new Vector3(27f, 0.8f, 3f)
-        );
         enemySpawnPoints.Add(new Vector3(26f, 0.5f, 3f));
         enemySpawnArchetypes.Add("");
 
@@ -755,11 +670,6 @@ public class DungeonBuilder : NetworkBehaviour
             Door.E(dw)
         );
 
-        Coins(
-            new Vector3(-23f, 0.8f, 0f),
-            new Vector3(-21f, 0.8f, 2f),
-            new Vector3(-24f, 0.8f, -2f)
-        );
         enemySpawnPoints.Add(new Vector3(-23f, 0.5f, 0f));
         enemySpawnArchetypes.Add("");
     }
@@ -994,43 +904,7 @@ public class DungeonBuilder : NetworkBehaviour
         }
     }
 
-    private void Coins(params Vector3[] points)
-    {
-        for (int i = 0; i < points.Length; i++)
-        {
-            coinSpawnPoints.Add(points[i]);
-        }
-    }
-
     // ── Entity Spawning ──────────────────────────────────────────────────────
-    private void SpawnCoins()
-    {
-        EnsureCoinPrefab();
-
-        if (coinPrefab == null)
-        {
-            Debug.LogError("[DungeonBuilder] No coin prefab assigned and could not find one!");
-            return;
-        }
-
-        DungeonLayoutData layout = currentResolvedLayout != null ? currentResolvedLayout : GetResolvedLayout();
-        bool isAuthored = layout != null && layout.rooms.Count > 0;
-        int count = isAuthored ? coinSpawnPoints.Count : Mathf.Min(coinCount, coinSpawnPoints.Count);
-
-        for (int i = 0; i < count; i++)
-        {
-            GameObject c = Instantiate(coinPrefab, coinSpawnPoints[i], Quaternion.identity);
-            NetworkObject no = c.GetComponent<NetworkObject>();
-            if (no != null)
-            {
-                no.Spawn();
-            }
-            spawnedCoins.Add(c);
-        }
-
-        Debug.Log($"[DungeonBuilder] Spawned {spawnedCoins.Count} coins across the dungeon.");
-    }
-
     private void SpawnEnemies()
     {
         EnsureEnemyPrefab();
@@ -1048,36 +922,53 @@ public class DungeonBuilder : NetworkBehaviour
 
         for (int i = 0; i < count; i++)
         {
-            GameObject e = Instantiate(enemyPrefab, enemySpawnPoints[i], Quaternion.identity);
-            NetworkObject no = e.GetComponent<NetworkObject>();
-            if (no != null)
+            string targetId = i < enemySpawnArchetypes.Count ? enemySpawnArchetypes[i] : null;
+            EnemyData chosenData = null;
+
+            if (!string.IsNullOrEmpty(targetId))
             {
-                no.Spawn();
+                chosenData = EnemyRegistry.GetEnemy(targetId);
             }
 
-            EnemyHealth eh = e.GetComponent<EnemyHealth>();
-            if (eh != null)
+            if (chosenData == null && allEnemies != null && allEnemies.Count > 0)
             {
-                string targetId = i < enemySpawnArchetypes.Count ? enemySpawnArchetypes[i] : null;
-                EnemyData chosenData = null;
+                chosenData = allEnemies[i % allEnemies.Count];
+            }
 
-                if (!string.IsNullOrEmpty(targetId))
+            int spawnPackSize = (chosenData != null && chosenData.packSpawnCount > 1) ? chosenData.packSpawnCount : 1;
+
+            for (int p = 0; p < spawnPackSize; p++)
+            {
+                Vector3 spawnPos = enemySpawnPoints[i];
+                if (p > 0)
                 {
-                    chosenData = EnemyRegistry.GetEnemy(targetId);
+                    Vector2 packOffset = Random.insideUnitCircle * (1.1f + p * 0.4f);
+                    Vector3 testPos = spawnPos + new Vector3(packOffset.x, 0f, packOffset.y);
+                    if (NavMesh.SamplePosition(testPos, out NavMeshHit hit, 3f, NavMesh.AllAreas))
+                    {
+                        spawnPos = hit.position;
+                    }
+                    else
+                    {
+                        spawnPos = testPos;
+                    }
                 }
 
-                if (chosenData == null && allEnemies != null && allEnemies.Count > 0)
+                GameObject e = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
+                NetworkObject no = e.GetComponent<NetworkObject>();
+                if (no != null)
                 {
-                    chosenData = allEnemies[i % allEnemies.Count];
+                    no.Spawn();
                 }
 
-                if (chosenData != null)
+                EnemyHealth eh = e.GetComponent<EnemyHealth>();
+                if (eh != null && chosenData != null)
                 {
                     eh.ApplyEnemyData(chosenData);
                 }
-            }
 
-            spawnedEnemies.Add(e);
+                spawnedEnemies.Add(e);
+            }
         }
 
         Debug.Log($"[DungeonBuilder] Spawned {spawnedEnemies.Count} enemies across the dungeon.");
@@ -1146,24 +1037,6 @@ public class DungeonBuilder : NetworkBehaviour
             return;
         }
 
-        for (int i = spawnedCoins.Count - 1; i >= 0; i--)
-        {
-            if (spawnedCoins[i] == null)
-            {
-                continue;
-            }
-            NetworkObject no = spawnedCoins[i].GetComponent<NetworkObject>();
-            if (no != null && no.IsSpawned)
-            {
-                no.Despawn(true);
-            }
-            else
-            {
-                Destroy(spawnedCoins[i]);
-            }
-        }
-        spawnedCoins.Clear();
-
         for (int i = spawnedEnemies.Count - 1; i >= 0; i--)
         {
             if (spawnedEnemies[i] == null)
@@ -1203,7 +1076,6 @@ public class DungeonBuilder : NetworkBehaviour
             }
         }
 
-        SpawnCoins();
         SpawnEnemies();
         SpawnModularFeatures();
     }
@@ -1212,7 +1084,6 @@ public class DungeonBuilder : NetworkBehaviour
 #if UNITY_EDITOR
     public void BuildDungeonInEditor()
     {
-        EnsureCoinPrefab();
         EnsureLeverPrefab();
         EnsureDoorPrefab();
         currentResolvedLayout = GetResolvedLayout();

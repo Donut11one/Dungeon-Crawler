@@ -7,7 +7,7 @@ using UnityEngine;
 /// <summary>
 /// Unified in-scene visual map builder tool for level designers and developers.
 /// Renders an in-scene floating toolbar and handles 3D click-to-place placement
-/// for thematic rooms, unlockable blast doors, interactive wall levers, coin loot,
+/// for thematic rooms, unlockable blast doors, interactive wall levers,
 /// monster spawns, and extraction pads directly in the Unity Scene View.
 /// Saves and loads complete dungeon layouts directly to/from DungeonLayoutData assets.
 /// </summary>
@@ -19,11 +19,10 @@ public class DungeonMapBuilderTool : EditorWindow
         Room = 1,
         Door = 2,
         Lever = 3,
-        Coin = 4,
-        Enemy = 5,
-        ExtractionPad = 6,
-        PlayerSpawn = 7,
-        Erase = 8
+        Enemy = 4,
+        ExtractionPad = 5,
+        PlayerSpawn = 6,
+        Erase = 7
     }
 
     public enum ThematicRoomPreset
@@ -75,7 +74,6 @@ public class DungeonMapBuilderTool : EditorWindow
     // Prefab references
     private GameObject doorPrefab;
     private GameObject leverPrefab;
-    private GameObject coinPrefab;
     private GameObject enemyPrefab;
 
     [MenuItem("Tools/Dungeon Crawler/Scene Map Builder", false, 1)]
@@ -118,7 +116,6 @@ public class DungeonMapBuilderTool : EditorWindow
     {
         doorPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Dungeon/DoorPrefab.prefab");
         leverPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Dungeon/LeverPrefab.prefab");
-        coinPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Items/CoinPrefab.prefab");
         enemyPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Entities/EnemyPrefab.prefab");
 
         if (doorPrefab == null)
@@ -186,12 +183,11 @@ public class DungeonMapBuilderTool : EditorWindow
 
         EditorGUILayout.BeginHorizontal();
         DrawToolButton("🕹️ Lever", BuilderToolMode.Lever, new Color(1f, 0.8f, 0.2f));
-        DrawToolButton("💰 Coin", BuilderToolMode.Coin, new Color(1f, 0.9f, 0.3f));
         DrawToolButton("👾 Monster", BuilderToolMode.Enemy, new Color(1f, 0.4f, 0.4f));
+        DrawToolButton("🎯 Extraction", BuilderToolMode.ExtractionPad, new Color(0.4f, 1f, 0.6f));
         EditorGUILayout.EndHorizontal();
 
         EditorGUILayout.BeginHorizontal();
-        DrawToolButton("🎯 Extraction", BuilderToolMode.ExtractionPad, new Color(0.4f, 1f, 0.6f));
         DrawToolButton("🚩 Player Spawn", BuilderToolMode.PlayerSpawn, new Color(0.5f, 0.7f, 1f));
         DrawToolButton("🧹 Erase", BuilderToolMode.Erase, new Color(1f, 0.3f, 0.3f));
         EditorGUILayout.EndHorizontal();
@@ -281,11 +277,11 @@ public class DungeonMapBuilderTool : EditorWindow
     {
         string desc = preset switch
         {
-            ThematicRoomPreset.StartingHub_16x16 => "🚀 Starting Hub: Safe starting airlock with 4 player spawns, starter coins, and exit security door.",
-            ThematicRoomPreset.ExtractionChamber_10x12 => "🎯 Extraction Chamber: Extraction pad at center, perimeter bonus loot, emergency lighting.",
-            ThematicRoomPreset.ContainmentCell_10x10 => "🔒 Containment Cell: Locked blast door, exterior lever, containment monster inside, jackpot coins.",
-            ThematicRoomPreset.CoopPuzzleVault_12x10 => "🤝 Co-op Puzzle Vault: Sealed vault with 2 timed levers (4s delay) and rich coin cache.",
-            ThematicRoomPreset.StorageDepot_12x12 => "📦 Storage Depot: Warehouse with 4 corner pillars, 6 scattered coins, and 1 lurking monster.",
+            ThematicRoomPreset.StartingHub_16x16 => "🚀 Starting Hub: Safe starting airlock with 4 player spawns, and exit security door.",
+            ThematicRoomPreset.ExtractionChamber_10x12 => "🎯 Extraction Chamber: Extraction pad at center, emergency lighting.",
+            ThematicRoomPreset.ContainmentCell_10x10 => "🔒 Containment Cell: Locked blast door, exterior lever, and containment monster inside.",
+            ThematicRoomPreset.CoopPuzzleVault_12x10 => "🤝 Co-op Puzzle Vault: Sealed vault with 2 timed levers (4s delay).",
+            ThematicRoomPreset.StorageDepot_12x12 => "📦 Storage Depot: Warehouse with 4 corner pillars and 1 lurking monster.",
             ThematicRoomPreset.ConnectingCorridor_4x14 => "🛤️ Connecting Corridor: 4x14 hallway with North and South doorways for chase routes.",
             ThematicRoomPreset.CrossroadsJunction_12x12 => "➕ Crossroads Junction: 4-way intersection connecting four branches of the dungeon.",
             _ => ""
@@ -474,7 +470,6 @@ public class DungeonMapBuilderTool : EditorWindow
         DrawSceneToolbarButton("Room", BuilderToolMode.Room);
         DrawSceneToolbarButton("Door", BuilderToolMode.Door);
         DrawSceneToolbarButton("Lever", BuilderToolMode.Lever);
-        DrawSceneToolbarButton("Coin", BuilderToolMode.Coin);
         DrawSceneToolbarButton("Monster", BuilderToolMode.Enemy);
         DrawSceneToolbarButton("Extraction", BuilderToolMode.ExtractionPad);
         DrawSceneToolbarButton("Erase", BuilderToolMode.Erase);
@@ -664,11 +659,6 @@ public class DungeonMapBuilderTool : EditorWindow
                 Handles.DrawLine(pos, pos + rot * Vector3.forward * 0.8f);
                 break;
 
-            case BuilderToolMode.Coin:
-                Handles.color = new Color(1f, 0.85f, 0.1f, 0.95f);
-                Handles.DrawSolidDisc(pos + Vector3.up * 0.4f, Vector3.up, 0.35f);
-                break;
-
             case BuilderToolMode.Enemy:
                 Handles.color = new Color(1f, 0.25f, 0.25f, 0.9f);
                 Handles.DrawWireCube(pos + Vector3.up * 1f, new Vector3(0.8f, 2f, 0.8f));
@@ -780,10 +770,6 @@ public class DungeonMapBuilderTool : EditorWindow
 
             case BuilderToolMode.Lever:
                 PlaceLever(parentObj, pos, normal, rot);
-                break;
-
-            case BuilderToolMode.Coin:
-                PlaceCoin(parentObj, pos);
                 break;
 
             case BuilderToolMode.Enemy:
@@ -962,16 +948,10 @@ public class DungeonMapBuilderTool : EditorWindow
                     PlaceDoor(roomObj, center + roomRot * new Vector3(0f, 0f, 8f), roomRot * Quaternion.identity);
                 }
 
-                PlaceCoin(roomObj, center + roomRot * new Vector3(-5f, 0f, 5f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(5f, 0f, 5f));
                 break;
 
             case ThematicRoomPreset.ExtractionChamber_10x12:
                 PlaceExtractionPad(roomObj, center);
-                PlaceCoin(roomObj, center + roomRot * new Vector3(-3f, 0f, 3f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(3f, 0f, 3f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(-3f, 0f, -3f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(3f, 0f, -3f));
                 break;
 
             case ThematicRoomPreset.ContainmentCell_10x10:
@@ -985,8 +965,6 @@ public class DungeonMapBuilderTool : EditorWindow
                 }
 
                 PlaceEnemy(roomObj, center);
-                PlaceCoin(roomObj, center + roomRot * new Vector3(-2f, 0f, 3f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(2f, 0f, 3f));
                 break;
 
             case ThematicRoomPreset.CoopPuzzleVault_12x10:
@@ -1002,10 +980,6 @@ public class DungeonMapBuilderTool : EditorWindow
                 PlaceLever(roomObj, center + roomRot * new Vector3(-5.85f, 0f, 0f), roomRot * Vector3.right, roomRot * Quaternion.Euler(0f, 90f, 0f));
                 PlaceLever(roomObj, center + roomRot * new Vector3(5.85f, 0f, 0f), roomRot * Vector3.left, roomRot * Quaternion.Euler(0f, -90f, 0f));
                 leverResetDelay = 0f;
-
-                PlaceCoin(roomObj, center + roomRot * new Vector3(0f, 0f, 1f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(-1.5f, 0f, 2f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(1.5f, 0f, 2f));
                 break;
 
             case ThematicRoomPreset.StorageDepot_12x12:
@@ -1015,14 +989,9 @@ public class DungeonMapBuilderTool : EditorWindow
                 CreatePrimitiveCube(roomObj.transform, "Pillar_4", new Vector3(3.5f, 2f, -3.5f), new Vector3(0.8f, 4f, 0.8f), wallCol);
 
                 PlaceEnemy(roomObj, center + roomRot * new Vector3(0f, 0f, 2f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(-3.5f, 0f, 0f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(3.5f, 0f, 0f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(0f, 0f, -3f));
                 break;
 
             case ThematicRoomPreset.ConnectingCorridor_4x14:
-                PlaceCoin(roomObj, center + roomRot * new Vector3(0f, 0f, -3f));
-                PlaceCoin(roomObj, center + roomRot * new Vector3(0f, 0f, 3f));
                 break;
         }
 
@@ -1091,21 +1060,6 @@ public class DungeonMapBuilderTool : EditorWindow
         Selection.activeGameObject = leverObj;
     }
 
-    private void PlaceCoin(GameObject parent, Vector3 pos)
-    {
-        if (coinPrefab == null)
-        {
-            LoadPrefabs();
-        }
-
-        Vector3 coinPos = new Vector3(pos.x, pos.y + 0.4f, pos.z);
-        GameObject coinObj = (GameObject)PrefabUtility.InstantiatePrefab(coinPrefab, parent.transform);
-        coinObj.transform.position = coinPos;
-        coinObj.name = "Coin";
-
-        Undo.RegisterCreatedObjectUndo(coinObj, "Place Coin");
-    }
-
     private void PlaceEnemy(GameObject parent, Vector3 pos)
     {
         if (enemyPrefab == null)
@@ -1113,23 +1067,34 @@ public class DungeonMapBuilderTool : EditorWindow
             LoadPrefabs();
         }
 
-        Vector3 spawnPos = new Vector3(pos.x, pos.y + 0.5f, pos.z);
-        GameObject enemyObj = (GameObject)PrefabUtility.InstantiatePrefab(enemyPrefab, parent.transform);
-        enemyObj.transform.position = spawnPos;
-        enemyObj.name = $"Enemy_{selectedEnemyId}";
+        EnemyData data = !string.IsNullOrEmpty(selectedEnemyId) ? EnemyRegistry.GetEnemy(selectedEnemyId) : null;
+        int packCount = (data != null && data.packSpawnCount > 1) ? data.packSpawnCount : 1;
 
-        EnemyHealth eh = enemyObj.GetComponent<EnemyHealth>();
-        if (eh != null && !string.IsNullOrEmpty(selectedEnemyId))
+        for (int p = 0; p < packCount; p++)
         {
-            EnemyData data = EnemyRegistry.GetEnemy(selectedEnemyId);
-            if (data != null)
+            Vector3 spawnPos = new Vector3(pos.x, pos.y + 0.5f, pos.z);
+            if (p > 0)
+            {
+                Vector2 offset = Random.insideUnitCircle * (1.1f + p * 0.4f);
+                spawnPos += new Vector3(offset.x, 0f, offset.y);
+            }
+
+            GameObject enemyObj = (GameObject)PrefabUtility.InstantiatePrefab(enemyPrefab, parent.transform);
+            enemyObj.transform.position = spawnPos;
+            enemyObj.name = $"Enemy_{selectedEnemyId}";
+
+            EnemyHealth eh = enemyObj.GetComponent<EnemyHealth>();
+            if (eh != null && data != null)
             {
                 eh.ApplyEnemyData(data);
             }
-        }
 
-        Undo.RegisterCreatedObjectUndo(enemyObj, "Place Enemy");
-        Selection.activeGameObject = enemyObj;
+            Undo.RegisterCreatedObjectUndo(enemyObj, "Place Enemy");
+            if (p == 0)
+            {
+                Selection.activeGameObject = enemyObj;
+            }
+        }
     }
 
     private void PlaceExtractionPad(GameObject parent, Vector3 pos)
@@ -1197,11 +1162,6 @@ public class DungeonMapBuilderTool : EditorWindow
                 targetToDelete = tr.GetComponentInParent<DungeonLever>().gameObject;
                 break;
             }
-            if (tr.GetComponentInParent<Coin>() != null)
-            {
-                targetToDelete = tr.GetComponentInParent<Coin>().gameObject;
-                break;
-            }
             if (tr.GetComponentInParent<EnemyHealth>() != null)
             {
                 targetToDelete = tr.GetComponentInParent<EnemyHealth>().gameObject;
@@ -1253,7 +1213,7 @@ public class DungeonMapBuilderTool : EditorWindow
     // ── Saving, Loading & Export ─────────────────────────────────────────────
 
     /// <summary>
-    /// Scans the entire scene for placed rooms, blast doors, wall levers, coins,
+    /// Scans the entire scene for placed rooms, blast doors, wall levers,
     /// monsters, player spawns, and extraction points.
     /// Serializes everything into the active DungeonLayoutData asset and binds it
     /// to the scene's DungeonBuilder so it loads immediately when clicking Play.
@@ -1336,19 +1296,7 @@ public class DungeonMapBuilderTool : EditorWindow
             ));
         }
 
-        // 3. Scan and save all Coins in the scene
-        Coin[] coins = FindObjectsByType<Coin>(FindObjectsInactive.Exclude);
-        for (int c = 0; c < coins.Length; c++)
-        {
-            Coin coin = coins[c];
-            DungeonRoom hostRoom = coin.GetComponentInParent<DungeonRoom>() ?? FindClosestRoom(coin.transform.position, sceneRooms);
-            RoomLayoutData rData = hostRoom != null ? roomDataMap[hostRoom] : fallbackRoom;
-
-            Vector3 localPos = hostRoom != null ? hostRoom.transform.InverseTransformPoint(coin.transform.position) : coin.transform.position;
-            rData.coinSpawns.Add(localPos);
-        }
-
-        // 4. Scan and save all Monsters in the scene
+        // 3. Scan and save all Monsters in the scene
         EnemyHealth[] enemies = FindObjectsByType<EnemyHealth>(FindObjectsInactive.Exclude);
         for (int e = 0; e < enemies.Length; e++)
         {
@@ -1400,7 +1348,7 @@ public class DungeonMapBuilderTool : EditorWindow
 
                 if (cName == "Floor" || cName == "Ceiling" || cName.StartsWith("Wall") ||
                     cName.StartsWith("Socket_") || cName.StartsWith("BlastDoor") ||
-                    cName.StartsWith("Lever") || cName.StartsWith("Coin") ||
+                    cName.StartsWith("Lever") ||
                     cName.StartsWith("Enemy") || cName.StartsWith("PlayerSpawn") ||
                     cName == "ExtractionPoint")
                 {
@@ -1408,7 +1356,7 @@ public class DungeonMapBuilderTool : EditorWindow
                 }
 
                 if (child.GetComponent<DungeonDoor>() != null || child.GetComponent<DungeonLever>() != null ||
-                    child.GetComponent<Coin>() != null || child.GetComponent<EnemyHealth>() != null ||
+                    child.GetComponent<EnemyHealth>() != null ||
                     child.GetComponent<ExtractionPoint>() != null)
                 {
                     continue;
@@ -1454,7 +1402,7 @@ public class DungeonMapBuilderTool : EditorWindow
         }
         EditorApplication.Beep();
 
-        Debug.Log($"[MapBuilder] Saved map '{targetLayoutAsset.layoutName}' ({targetLayoutAsset.rooms.Count} rooms, {doors.Length} doors, {levers.Length} levers, {coins.Length} coins, {enemies.Length} monsters)!");
+        Debug.Log($"[MapBuilder] Saved map '{targetLayoutAsset.layoutName}' ({targetLayoutAsset.rooms.Count} rooms, {doors.Length} doors, {levers.Length} levers, {enemies.Length} monsters)!");
     }
 
     private void LoadLayoutAssetIntoScene()

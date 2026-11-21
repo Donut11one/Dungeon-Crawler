@@ -265,10 +265,9 @@ MonoBehaviour:
   knockbackMultiplier: 3
   deathDespawnDelay: 4
   damageCooldown: 0.5
-  dropPrefabs:
-  - {fileID: 4810294819203810291, guid: 68ec2c99149d4a4e908ac6ea3bcbe7e8, type: 3}
-  minDropCount: 2
-  maxDropCount: 4
+  dropPrefabs: []
+  minDropCount: 0
+  maxDropCount: 0
   dropScatterForce: 4.5
   CurrentHealth:
     UpdateTraits:

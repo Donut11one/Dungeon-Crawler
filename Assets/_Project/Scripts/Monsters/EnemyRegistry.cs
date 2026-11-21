@@ -114,7 +114,14 @@ public static class EnemyRegistry
             attackRecovery = 1.2f,
             attackKnockback = 8.0f,
             bodyColorHex = "#B32626",
-            eyeColorHex = "#FFEE33"
+            eyeColorHex = "#FFEE33",
+            visionAngle = 180f,
+            wanderRadius = 8f,
+            wanderInterval = 3.5f,
+            isSwarmAlert = false,
+            swarmAlertRadius = 18f,
+            packSpawnCount = 1,
+            modelScale = 1.0f
         };
         Register(defaultEnemy);
     }
