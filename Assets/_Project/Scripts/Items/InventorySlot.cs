@@ -42,7 +42,7 @@ public struct InventorySlot : INetworkSerializable, System.IEquatable<InventoryS
         return itemId.Equals(other.itemId) && count == other.count;
     }
 
-    public override bool Equals(object obj)
+   public override bool Equals(object obj)
     {
         if (obj is InventorySlot other)
         {
