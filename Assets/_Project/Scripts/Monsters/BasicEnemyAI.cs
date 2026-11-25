@@ -118,11 +118,20 @@ public class BasicEnemyAI : NetworkBehaviour
     private void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
+        if (agent != null)
+        {
+            agent.baseOffset = 0f;
+        }
         ragdollController = GetComponent<RagdollController>();
         enemyHealth = GetComponent<EnemyHealth>();
         propBlock = new MaterialPropertyBlock();
 
         CacheRenderers();
+    }
+
+    private void Start()
+    {
+        SnapToGround();
     }
 
     private void CacheRenderers()
@@ -311,12 +320,61 @@ public class BasicEnemyAI : NetworkBehaviour
         CapsuleCollider col = GetComponent<CapsuleCollider>();
         if (col != null)
         {
-            col.radius = 0.45f * scale;
-            col.height = 1.8f * scale;
-            col.center = new Vector3(0f, 0.9f * scale, 0f);
+            // Note: transform.localScale already scales the collider proportionally in world space.
+            // Keeping local collider normalized (radius 0.45, height 1.8, center 0.9)
+            // ensures the bottom of the capsule remains exactly at y = 0 (the feet).
+            col.radius = 0.45f;
+            col.height = 1.8f;
+            col.center = new Vector3(0f, 0.9f, 0f);
         }
 
+        SnapToGround();
         UpdateStateVisuals(CurrentCombatState.Value);
+    }
+
+    /// <summary>
+    /// Snaps the enemy firmly to the ground surface using physics raycasting and NavMesh warping.
+    /// Prevents enemies from hovering in the air after spawning or scene loading.
+    /// </summary>
+    public void SnapToGround()
+    {
+        Vector3 currentPos = transform.position;
+        float groundY = currentPos.y;
+        bool foundGround = false;
+
+        // 1. Raycast down from above the enemy to find physical floor surface
+        Vector3 rayStart = currentPos + Vector3.up * 2.5f;
+        if (Physics.Raycast(rayStart, Vector3.down, out RaycastHit hit, 10f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            groundY = hit.point.y;
+            foundGround = true;
+        }
+        else if (NavMesh.SamplePosition(currentPos, out NavMeshHit navHit, 6f, NavMesh.AllAreas))
+        {
+            groundY = navHit.position.y;
+            foundGround = true;
+        }
+
+        if (foundGround)
+        {
+            transform.position = new Vector3(currentPos.x, groundY, currentPos.z);
+        }
+
+        // 2. Warp NavMeshAgent to NavMesh surface so it doesn't float
+        if (agent != null && agent.enabled)
+        {
+            if (NavMesh.SamplePosition(transform.position, out NavMeshHit navHit, 6f, NavMesh.AllAreas))
+            {
+                agent.Warp(navHit.position);
+            }
+        }
+
+        // 3. Keep Rigidbody in sync
+        Rigidbody rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.position = transform.position;
+        }
     }
 
     private void ApplyColor(Renderer rend, Color color)

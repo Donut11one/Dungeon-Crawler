@@ -360,6 +360,123 @@ public class PlayerInventory : NetworkBehaviour
         Slots[index] = default;
     }
 
+    private Light flashlightLight;
+
+    /// <summary>
+    /// Toggles the tactical flashlight beam mounted to the player's camera.
+    /// </summary>
+    public void ToggleFlashlight()
+    {
+        if (flashlightLight == null)
+        {
+            Camera cam = GetComponentInChildren<Camera>();
+            if (cam != null)
+            {
+                Transform existing = cam.transform.Find("FlashlightBeam");
+                if (existing != null)
+                {
+                    flashlightLight = existing.GetComponent<Light>();
+                }
+                else
+                {
+                    GameObject lightGo = new GameObject("FlashlightBeam");
+                    lightGo.transform.parent = cam.transform;
+                    lightGo.transform.localPosition = new Vector3(0.2f, -0.15f, 0.3f);
+                    lightGo.transform.localRotation = Quaternion.identity;
+                    flashlightLight = lightGo.AddComponent<Light>();
+                    flashlightLight.type = LightType.Spot;
+                    flashlightLight.range = 28f;
+                    flashlightLight.spotAngle = 48f;
+                    flashlightLight.innerSpotAngle = 32f;
+                    flashlightLight.intensity = 2.8f;
+                    flashlightLight.color = new Color(1f, 0.96f, 0.85f);
+                    flashlightLight.shadows = LightShadows.Hard;
+                }
+            }
+        }
+
+        if (flashlightLight != null)
+        {
+            flashlightLight.enabled = !flashlightLight.enabled;
+        }
+    }
+
+    /// <summary>
+    /// Uses the currently equipped item (e.g. consuming a medkit or toggling a flashlight).
+    /// Returns true if an action was executed.
+    /// </summary>
+    public bool UseSelectedItem()
+    {
+        ItemData item = GetSelectedItem();
+        if (item == null)
+        {
+            return false;
+        }
+
+        if (item.ItemId == "medkit")
+        {
+            PlayerHealth health = GetComponent<PlayerHealth>();
+            if (health != null && health.CurrentHealth.Value >= health.MaxHealth)
+            {
+                return false;
+            }
+
+            UseConsumableServerRpc(SelectedSlotIndex.Value);
+            return true;
+        }
+        else if (item.ItemId == "flashlight")
+        {
+            ToggleFlashlight();
+            return true;
+        }
+
+        return false;
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void UseConsumableServerRpc(int slotIndex)
+    {
+        if (!IsServer || Slots == null || slotIndex < 0 || slotIndex >= Slots.Count)
+        {
+            return;
+        }
+
+        InventorySlot slot = Slots[slotIndex];
+        if (slot.IsEmpty)
+        {
+            return;
+        }
+
+        string id = slot.itemId.ToString();
+        if (id == "medkit")
+        {
+            PlayerHealth health = GetComponent<PlayerHealth>();
+            if (health != null && health.Heal(50))
+            {
+                slot.count--;
+                if (slot.count <= 0)
+                {
+                    Slots[slotIndex] = default;
+                }
+                else
+                {
+                    Slots[slotIndex] = slot;
+                }
+                ItemUseFeedbackClientRpc("Applied First Aid Kit! (+50 HP)", true);
+            }
+            else
+            {
+                ItemUseFeedbackClientRpc("Health is already full!", false);
+            }
+        }
+    }
+
+    [Rpc(SendTo.Owner)]
+    private void ItemUseFeedbackClientRpc(string message, bool success)
+    {
+        Debug.Log($"[PlayerInventory] {message}");
+    }
+
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void BuyItemServerRpc(string itemId)
     {

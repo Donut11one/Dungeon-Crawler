@@ -270,6 +270,45 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     }
 
     /// <summary>
+    /// Server: Restores health up to maxHealth.
+    /// Returns true if health was restored, false if already at full health.
+    /// </summary>
+    public bool Heal(int amount)
+    {
+        if (!IsServer || IsDead.Value || amount <= 0)
+        {
+            return false;
+        }
+
+        if (CurrentHealth.Value >= maxHealth)
+        {
+            return false;
+        }
+
+        int previous = CurrentHealth.Value;
+        CurrentHealth.Value = Mathf.Min(maxHealth, CurrentHealth.Value + amount);
+        int healedAmount = CurrentHealth.Value - previous;
+
+        OnHealedClientRpc(healedAmount, CurrentHealth.Value);
+        return true;
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void HealServerRpc(int amount)
+    {
+        Heal(amount);
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void OnHealedClientRpc(int healedAmount, int currentHealth)
+    {
+        if (IsOwner)
+        {
+            Debug.Log($"[PlayerHealth] Healed +{healedAmount} HP! (Health: {currentHealth}/{maxHealth})");
+        }
+    }
+
+    /// <summary>
     /// Server: Reset player health, death state, and position for a round restart.
     /// </summary>
     public void ResetPlayer(Vector3 newSpawnPosition)

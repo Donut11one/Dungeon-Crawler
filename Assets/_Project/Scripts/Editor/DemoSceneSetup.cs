@@ -149,9 +149,9 @@ public static class DemoSceneSetup
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
         CapsuleCollider capsule = player.AddComponent<CapsuleCollider>();
-        capsule.height = 2f;
-        capsule.radius = 0.4f;
-        capsule.center = new Vector3(0f, 1f, 0f);
+        capsule.height = 1.52f;
+        capsule.radius = 0.32f;
+        capsule.center = new Vector3(0f, 0.76f, 0f);
 
         // Visual body (capsule)
         GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
@@ -170,7 +170,7 @@ public static class DemoSceneSetup
         // Camera holder
         GameObject cameraHolder = new GameObject("CameraHolder");
         cameraHolder.transform.parent = player.transform;
-        cameraHolder.transform.localPosition = new Vector3(0f, 1.6f, 0f);
+        cameraHolder.transform.localPosition = new Vector3(0f, 1.40f, 0f);
 
         // Camera
         GameObject cameraObj = new GameObject("PlayerCamera");

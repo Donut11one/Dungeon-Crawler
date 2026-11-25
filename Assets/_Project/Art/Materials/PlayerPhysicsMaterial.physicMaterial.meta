@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: 7b8e1f02c4934504893c3930daf25400
+PhysicMaterial:
+  serializedVersion: 3
+  dynamicFriction: 0
+  staticFriction: 0
+  bounciness: 0
+  frictionCombine: 1
+  bounceCombine: 1

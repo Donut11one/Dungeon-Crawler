@@ -30,6 +30,23 @@ public class PlayerController : NetworkBehaviour
     [Header("References")]
     [SerializeField] private Transform cameraHolder;
 
+    [Header("First Person Visuals")]
+    [Tooltip("If true, the local player's body mesh is hidden from their own camera (ShadowsOnly). If false, the body mesh is visible to the player.")]
+    [SerializeField] private bool hideBodyFromOwner = false;
+
+    public bool HideBodyFromOwner
+    {
+        get
+        {
+            return hideBodyFromOwner;
+        }
+        set
+        {
+            hideBodyFromOwner = value;
+            ApplyBodyVisibility();
+        }
+    }
+
     public NetworkVariable<float> CameraPitch = new NetworkVariable<float>(
         0f,
         NetworkVariableReadPermission.Everyone,
@@ -71,6 +88,9 @@ public class PlayerController : NetworkBehaviour
     private readonly RaycastHit[] groundHits = new RaycastHit[8];
     private PlayerAttack playerAttack;
 
+    private Vector3 wallContactNormal = Vector3.zero;
+    private bool hasWallContact = false;
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -80,11 +100,27 @@ public class PlayerController : NetworkBehaviour
         playerAttack = GetComponent<PlayerAttack>();
         currentYaw = transform.eulerAngles.y;
         lastScreenSize = new Vector2Int(Screen.width, Screen.height);
+
+        // Apply zero-friction PhysicsMaterial to avoid wall-sticking and corner snagging
+        CapsuleCollider capsule = GetComponent<CapsuleCollider>();
+        if (capsule != null)
+        {
+            PhysicsMaterial frictionless = new PhysicsMaterial("PlayerFrictionless")
+            {
+                dynamicFriction = 0f,
+                staticFriction = 0f,
+                frictionCombine = PhysicsMaterialCombine.Minimum,
+                bounciness = 0f,
+                bounceCombine = PhysicsMaterialCombine.Minimum
+            };
+            capsule.material = frictionless;
+        }
     }
 
     public override void OnNetworkSpawn()
     {
         CameraPitch.OnValueChanged += OnCameraPitchChanged;
+        ApplyBodyVisibility();
 
         if (!IsOwner)
         {
@@ -138,16 +174,8 @@ public class PlayerController : NetworkBehaviour
             }
         }
 
-        // Hide local body from camera to prevent clipping into view, while keeping shadows
-        Transform bodyTr = transform.Find("Body");
-        if (bodyTr != null)
-        {
-            Renderer bodyRend = bodyTr.GetComponent<Renderer>();
-            if (bodyRend != null)
-            {
-                bodyRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
-            }
-        }
+        // Configure local body visibility for camera
+        ApplyBodyVisibility();
 
         // Set up rigidbody for FPS movement on owner
         if (rb != null)
@@ -181,6 +209,36 @@ public class PlayerController : NetworkBehaviour
         if (!IsOwner && cameraHolder != null)
         {
             cameraHolder.localRotation = Quaternion.Euler(current, 0f, 0f);
+        }
+    }
+
+    /// <summary>
+    /// Applies visibility settings to the body renderers based on owner state and hideBodyFromOwner.
+    /// </summary>
+    public void ApplyBodyVisibility()
+    {
+        Transform bodyTr = transform.Find("Body");
+        if (bodyTr != null)
+        {
+            Renderer[] bodyRends = bodyTr.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < bodyRends.Length; i++)
+            {
+                if (bodyRends[i] != null)
+                {
+                    bodyRends[i].enabled = true;
+                    bodyRends[i].shadowCastingMode = (IsOwner && hideBodyFromOwner)
+                        ? UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly
+                        : UnityEngine.Rendering.ShadowCastingMode.On;
+                }
+            }
+        }
+    }
+
+    private void OnValidate()
+    {
+        if (Application.isPlaying && IsSpawned)
+        {
+            ApplyBodyVisibility();
         }
     }
 
@@ -392,6 +450,26 @@ public class PlayerController : NetworkBehaviour
 
         if (grounded)
         {
+            // Deflect velocity along steep walls/corners so player slides smoothly instead of getting stuck
+            if (hasWallContact && input.sqrMagnitude > 0.01f)
+            {
+                float dot = Vector3.Dot(moveDir, wallContactNormal);
+                if (dot < 0f)
+                {
+                    Vector3 slideDir = Vector3.ProjectOnPlane(moveDir, wallContactNormal);
+                    if (slideDir.sqrMagnitude > 0.01f)
+                    {
+                        moveDir = slideDir.normalized;
+                        targetVelocity = moveDir * speed;
+                    }
+                    else
+                    {
+                        // Direct head-on push into an inside corner apex: cancel push into walls
+                        targetVelocity = Vector3.zero;
+                    }
+                }
+            }
+
             // Crisp, instantaneous ground movement with no sliding
             rb.linearVelocity = new Vector3(targetVelocity.x, rb.linearVelocity.y, targetVelocity.z);
         }
@@ -400,6 +478,18 @@ public class PlayerController : NetworkBehaviour
             // Mid-air: preserve momentum, allow smooth air steering
             if (input.sqrMagnitude > 0.01f)
             {
+                // In air, also deflect steering away from wall normals so player never sticks or wedges mid-air
+                if (hasWallContact)
+                {
+                    float dot = Vector3.Dot(moveDir, wallContactNormal);
+                    if (dot < 0f)
+                    {
+                        Vector3 airSlideDir = Vector3.ProjectOnPlane(moveDir, wallContactNormal);
+                        moveDir = airSlideDir.sqrMagnitude > 0.01f ? airSlideDir.normalized : Vector3.zero;
+                        targetVelocity = moveDir * speed;
+                    }
+                }
+
                 Vector3 currentHoriz = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
                 Vector3 newHoriz = Vector3.MoveTowards(currentHoriz, targetVelocity, airAcceleration * Time.fixedDeltaTime);
                 rb.linearVelocity = new Vector3(newHoriz.x, rb.linearVelocity.y, newHoriz.z);
@@ -407,10 +497,63 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    private bool CheckGrounded()
+    private void OnCollisionEnter(Collision collision)
+    {
+        EvaluateCollisionNormals(collision);
+    }
+
+    private void OnCollisionStay(Collision collision)
+    {
+        EvaluateCollisionNormals(collision);
+    }
+
+    private void OnCollisionExit(Collision collision)
+    {
+        hasWallContact = false;
+        wallContactNormal = Vector3.zero;
+    }
+
+    private void EvaluateCollisionNormals(Collision collision)
+    {
+        if (ragdollController != null && ragdollController.IsRagdolled.Value)
+        {
+            hasWallContact = false;
+            return;
+        }
+
+        Vector3 accumulatedNormal = Vector3.zero;
+        int wallCount = 0;
+
+        for (int i = 0; i < collision.contactCount; i++)
+        {
+            ContactPoint contact = collision.GetContact(i);
+            // Steep surface (wall, pillar, doorframe, corner): normal.y < 0.55f
+            if (contact.normal.y < 0.55f)
+            {
+                accumulatedNormal += contact.normal;
+                wallCount++;
+            }
+        }
+
+        if (wallCount > 0)
+        {
+            accumulatedNormal.y = 0f;
+            if (accumulatedNormal.sqrMagnitude > 0.001f)
+            {
+                wallContactNormal = accumulatedNormal.normalized;
+                hasWallContact = true;
+                return;
+            }
+        }
+
+        hasWallContact = false;
+        wallContactNormal = Vector3.zero;
+    }
+
+    public bool CheckGrounded()
     {
         Vector3 origin = transform.position + Vector3.up * 0.35f;
-        float radius = 0.3f;
+        float radius = 0.26f;
         float castDistance = 0.25f;
 
         int count = Physics.SphereCastNonAlloc(
@@ -428,7 +571,11 @@ public class PlayerController : NetworkBehaviour
             Collider col = groundHits[i].collider;
             if (col != null && !col.isTrigger && !col.transform.IsChildOf(transform))
             {
-                return true;
+                // Must be a walkable surface (normal pointing generally upward, not a steep wall or ceiling)
+                if (groundHits[i].normal.y >= 0.55f)
+                {
+                    return true;
+                }
             }
         }
 
@@ -437,7 +584,10 @@ public class PlayerController : NetworkBehaviour
         {
             if (hit.collider != null && !hit.collider.isTrigger && !hit.collider.transform.IsChildOf(transform))
             {
-                return true;
+                if (hit.normal.y >= 0.55f)
+                {
+                    return true;
+                }
             }
         }
 

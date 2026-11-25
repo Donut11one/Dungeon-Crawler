@@ -31,6 +31,7 @@ public class ArmoryShopUI : MonoBehaviour
 
     public bool IsOpen { get; private set; }
 
+    private float openTime = -1f;
     private int openFrame = -1;
     private string feedbackMessage = string.Empty;
     private bool feedbackSuccess = true;
@@ -42,7 +43,7 @@ public class ArmoryShopUI : MonoBehaviour
     {
         if (instance != null && instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 
@@ -79,7 +80,9 @@ public class ArmoryShopUI : MonoBehaviour
             return;
         }
 
+        ItemRegistry.Initialize();
         IsOpen = true;
+        openTime = Time.unscaledTime;
         openFrame = Time.frameCount;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -122,14 +125,14 @@ public class ArmoryShopUI : MonoBehaviour
             return;
         }
 
-        // Do not process close on the exact frame the shop was opened
-        if (Time.frameCount == openFrame)
+        // Debounce: ignore close requests for 0.25 seconds after opening to avoid instant re-trigger
+        if (Time.unscaledTime - openTime < 0.25f || Time.frameCount == openFrame)
         {
             return;
         }
 
         // Close if game state leaves the lobby
-        if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
+        if (GameManager.Instance != null && GameManager.Instance.IsSpawned && GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
         {
             CloseShop();
             return;
@@ -187,9 +190,9 @@ public class ArmoryShopUI : MonoBehaviour
         subStyle.normal.textColor = new Color(1f, 0.82f, 0.25f);
         GUI.Label(new Rect(x, y + 42f, dialogW, 20f), "GEAR IS KEPT ACROSS RUNS IF YOU EXTRACT! DYING OR TIMING OUT WILL LOSE YOUR WEAPONS.", subStyle);
 
-        // Player Bank savings
+        // Player Bank savings (safely read NetworkVariable)
         PlayerWallet localWallet = FindLocalPlayerWallet();
-        int bankMoney = localWallet != null ? localWallet.BankedMoney.Value : 0;
+        int bankMoney = (localWallet != null && localWallet.IsSpawned) ? localWallet.BankedMoney.Value : (localWallet != null ? 75 : 0);
         PlayerInventory localInventory = FindLocalPlayerInventory();
 
         GUIStyle bankStyle = new GUIStyle(GUI.skin.label)
@@ -218,92 +221,136 @@ public class ArmoryShopUI : MonoBehaviour
             }
         }
 
-        float contentH = Mathf.Max(scrollRect.height, shopItems.Count * 56f);
-        Rect contentRect = new Rect(0f, 0f, scrollRect.width - 18f, contentH);
-
-        scrollPos = GUI.BeginScrollView(scrollRect, scrollPos, contentRect);
-
-        GUIStyle itemNameStyle = new GUIStyle(GUI.skin.label)
+        // If shop items empty, trigger immediate reload
+        if (shopItems.Count == 0)
         {
-            fontSize = 13,
-            fontStyle = FontStyle.Bold
-        };
-        itemNameStyle.normal.textColor = Color.white;
-
-        GUIStyle itemStatStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 11
-        };
-        itemStatStyle.normal.textColor = new Color(0.75f, 0.78f, 0.82f);
-
-        GUIStyle priceStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 14,
-            alignment = TextAnchor.MiddleRight,
-            fontStyle = FontStyle.Bold
-        };
-        priceStyle.normal.textColor = new Color(1f, 0.85f, 0.1f);
-
-        for (int i = 0; i < shopItems.Count; i++)
-        {
-            ItemData item = shopItems[i];
-            float itemY = i * 56f;
-            float itemW = contentRect.width;
-
-            // Row background
-            Color rowColor = (i % 2 == 0)
-                ? new Color(0.12f, 0.14f, 0.17f, 0.75f)
-                : new Color(0.15f, 0.17f, 0.20f, 0.75f);
-            DrawRect(new Rect(0f, itemY, itemW, 50f), rowColor);
-
-            // Colored slot accent chip
-            DrawRect(new Rect(6f, itemY + 7f, 36f, 36f), item.SlotColor);
-
-            // Item Name & Type
-            GUI.Label(new Rect(50f, itemY + 4f, 260f, 20f), $"{item.DisplayName}  [{item.Type}]", itemNameStyle);
-
-            // Stats / Description
-            string statText;
-            if (item.Type == ItemType.Weapon)
+            ItemRegistry.Reload();
+            allItems = ItemRegistry.GetAllItems();
+            for (int i = 0; i < allItems.Count; i++)
             {
-                statText = $"Dmg: {item.Damage}  |  Speed: {item.AttackCooldown:0.00}s  |  Knockback: {item.KnockbackForce:0.0}";
-            }
-            else
-            {
-                statText = item.Description;
-            }
-            GUI.Label(new Rect(50f, itemY + 24f, 320f, 22f), statText, itemStatStyle);
-
-            // Price tag
-            int cost = item.BuyPrice > 0 ? item.BuyPrice : 25;
-            GUI.Label(new Rect(itemW - 190f, itemY + 12f, 75f, 26f), $"${cost}", priceStyle);
-
-            // Buy Button
-            bool canAfford = bankMoney >= cost;
-            bool hasSpace = localInventory != null && localInventory.HasFreeSlot();
-
-            string buyLabel = "BUY";
-            if (!canAfford)
-            {
-                buyLabel = "NO CASH";
-            }
-            else if (!hasSpace)
-            {
-                buyLabel = "FULL";
-            }
-
-            GUI.enabled = canAfford && hasSpace && localInventory != null;
-            if (GUI.Button(new Rect(itemW - 105f, itemY + 10f, 95f, 30f), buyLabel))
-            {
-                if (localInventory != null)
+                ItemData it = allItems[i];
+                if (it != null && it.Type != ItemType.Scrap)
                 {
-                    localInventory.BuyItemServerRpc(item.ItemId);
+                    shopItems.Add(it);
                 }
             }
-            GUI.enabled = true;
         }
 
-        GUI.EndScrollView();
+        if (shopItems.Count == 0)
+        {
+            GUIStyle emptyStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 14,
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold
+            };
+            emptyStyle.normal.textColor = new Color(1f, 0.4f, 0.4f);
+            GUI.Label(new Rect(x + 20f, y + 200f, dialogW - 40f, 30f), "ARMORY CATALOG EMPTY - INITIALIZING MUNITIONS...", emptyStyle);
+        }
+        else
+        {
+            float contentH = Mathf.Max(scrollRect.height, shopItems.Count * 56f);
+            Rect contentRect = new Rect(0f, 0f, scrollRect.width - 18f, contentH);
+
+            scrollPos = GUI.BeginScrollView(scrollRect, scrollPos, contentRect);
+
+            GUIStyle itemNameStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 13,
+                fontStyle = FontStyle.Bold
+            };
+            itemNameStyle.normal.textColor = Color.white;
+
+            GUIStyle itemStatStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 11
+            };
+            itemStatStyle.normal.textColor = new Color(0.75f, 0.78f, 0.82f);
+
+            GUIStyle priceStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 14,
+                alignment = TextAnchor.MiddleRight,
+                fontStyle = FontStyle.Bold
+            };
+            priceStyle.normal.textColor = new Color(1f, 0.85f, 0.1f);
+
+            for (int i = 0; i < shopItems.Count; i++)
+            {
+                ItemData item = shopItems[i];
+                if (item == null)
+                {
+                    continue;
+                }
+
+                float itemY = i * 56f;
+                float itemW = contentRect.width;
+
+                // Row background
+                Color rowColor = (i % 2 == 0)
+                    ? new Color(0.12f, 0.14f, 0.17f, 0.75f)
+                    : new Color(0.15f, 0.17f, 0.20f, 0.75f);
+                DrawRect(new Rect(0f, itemY, itemW, 50f), rowColor);
+
+                // Colored slot accent chip
+                DrawRect(new Rect(6f, itemY + 7f, 36f, 36f), item.SlotColor);
+
+                // Item Name & Type
+                GUI.Label(new Rect(50f, itemY + 4f, 260f, 20f), $"{item.DisplayName}  [{item.Type}]", itemNameStyle);
+
+                // Stats / Description
+                string statText;
+                if (item.Type == ItemType.Weapon || item.Type == ItemType.RangedWeapon)
+                {
+                    string rangeNote = item.Type == ItemType.RangedWeapon ? $"  |  Rng: {item.AttackRange:0}m" : "";
+                    string pelletNote = item.ItemId == "shotgun" ? "x6" : "";
+                    statText = $"Dmg: {item.Damage}{pelletNote}  |  Speed: {item.AttackCooldown:0.00}s  |  Knockback: {item.KnockbackForce:0.0}{rangeNote}";
+                }
+                else
+                {
+                    statText = item.Description;
+                }
+                GUI.Label(new Rect(50f, itemY + 24f, 320f, 22f), statText, itemStatStyle);
+
+                // Price tag
+                int cost = item.BuyPrice > 0 ? item.BuyPrice : 25;
+                GUI.Label(new Rect(itemW - 190f, itemY + 12f, 75f, 26f), $"${cost}", priceStyle);
+
+                // Buy Button
+                bool canAfford = bankMoney >= cost;
+                bool hasSpace = localInventory == null || !localInventory.IsSpawned || localInventory.HasFreeSlot();
+
+                string buyLabel = "BUY";
+                if (!canAfford)
+                {
+                    buyLabel = "NO CASH";
+                }
+                else if (!hasSpace)
+                {
+                    buyLabel = "FULL";
+                }
+
+                GUI.enabled = canAfford && hasSpace && localInventory != null;
+                if (GUI.Button(new Rect(itemW - 105f, itemY + 10f, 95f, 30f), buyLabel))
+                {
+                    if (localInventory != null)
+                    {
+                        if (localInventory.IsSpawned)
+                        {
+                            localInventory.BuyItemServerRpc(item.ItemId);
+                        }
+                        else
+                        {
+                            localInventory.AddItem(item.ItemId, 1);
+                            SetFeedback($"Purchased {item.DisplayName}!", true);
+                        }
+                    }
+                }
+                GUI.enabled = true;
+            }
+
+            GUI.EndScrollView();
+        }
 
         // 4. Feedback Message Bar
         if (feedbackTimer > 0f && !string.IsNullOrEmpty(feedbackMessage))
@@ -365,6 +412,11 @@ public class ArmoryShopUI : MonoBehaviour
             }
         }
 
+        if (pcs.Length > 0 && pcs[0] != null)
+        {
+            return pcs[0].GetComponent<PlayerWallet>();
+        }
+
         return null;
     }
 
@@ -386,6 +438,11 @@ public class ArmoryShopUI : MonoBehaviour
             {
                 return pcs[i].GetComponent<PlayerInventory>();
             }
+        }
+
+        if (pcs.Length > 0 && pcs[0] != null)
+        {
+            return pcs[0].GetComponent<PlayerInventory>();
         }
 
         return null;

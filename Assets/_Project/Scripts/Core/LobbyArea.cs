@@ -424,7 +424,9 @@ public class LobbyArea : NetworkBehaviour
         // Ensure ArmoryShopUI exists in scene
         if (FindAnyObjectByType<ArmoryShopUI>() == null)
         {
-            npcObj.AddComponent<ArmoryShopUI>();
+            GameObject uiObj = new GameObject("ArmoryShopUI");
+            uiObj.transform.parent = root;
+            uiObj.AddComponent<ArmoryShopUI>();
         }
     }
 

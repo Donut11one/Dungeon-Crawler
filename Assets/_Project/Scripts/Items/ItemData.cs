@@ -3,6 +3,7 @@ using UnityEngine;
 public enum ItemType
 {
     Weapon,
+    RangedWeapon,
     Tool,
     Consumable,
     Scrap
@@ -71,6 +72,30 @@ public class ItemData : ScriptableObject
         get
         {
             return itemType;
+        }
+    }
+
+    public bool IsWeapon
+    {
+        get
+        {
+            return itemType == ItemType.Weapon || itemType == ItemType.RangedWeapon;
+        }
+    }
+
+    public bool IsRanged
+    {
+        get
+        {
+            return itemType == ItemType.RangedWeapon;
+        }
+    }
+
+    public bool IsConsumable
+    {
+        get
+        {
+            return itemType == ItemType.Consumable;
         }
     }
 
@@ -189,6 +214,7 @@ public class ItemData : ScriptableObject
         float recovery = 0.55f)
     {
         ItemData item = CreateInstance<ItemData>();
+        item.hideFlags = HideFlags.DontSave;
         item.itemId = id;
         item.displayName = name;
         item.description = desc;

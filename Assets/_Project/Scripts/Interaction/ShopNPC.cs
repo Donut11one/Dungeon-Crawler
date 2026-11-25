@@ -11,7 +11,7 @@ public class ShopNPC : MonoBehaviour
 {
     [Header("Interaction Settings")]
     [SerializeField] private float interactionDistance = 5.2f;
-    [SerializeField] private float autoCloseDistance = 7.0f;
+    [SerializeField] private float autoCloseDistance = 7.5f;
     [SerializeField] private string npcName = "Quartermaster Knox";
     [SerializeField] private string npcTitle = "< Weapons & Munitions >";
 
@@ -27,7 +27,7 @@ public class ShopNPC : MonoBehaviour
 
     private void Update()
     {
-        if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
+        if (GameManager.Instance != null && GameManager.Instance.IsSpawned && GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
         {
             return;
         }
@@ -38,9 +38,8 @@ public class ShopNPC : MonoBehaviour
             return;
         }
 
-        // Distance from player to the shop counter front
-        Vector3 counterFront = transform.position + Vector3.forward * 0.75f;
-        float dist = Vector3.Distance(counterFront, localPlayer.position);
+        // Distance from player to the shop NPC position
+        float dist = Vector3.Distance(transform.position, localPlayer.position);
 
         // Auto-close if player walked away while shop was open
         if (ArmoryShopUI.Instance != null && ArmoryShopUI.Instance.IsOpen)
@@ -64,7 +63,7 @@ public class ShopNPC : MonoBehaviour
 
     private void OnGUI()
     {
-        if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
+        if (GameManager.Instance != null && GameManager.Instance.IsSpawned && GameManager.Instance.CurrentState.Value != GameManager.GameState.Lobby)
         {
             return;
         }
@@ -82,8 +81,7 @@ public class ShopNPC : MonoBehaviour
         }
 
         Transform localPlayer = GetLocalPlayerTransform();
-        Vector3 counterFront = transform.position + Vector3.forward * 0.75f;
-        float playerDist = localPlayer != null ? Vector3.Distance(counterFront, localPlayer.position) : 999f;
+        float playerDist = localPlayer != null ? Vector3.Distance(transform.position, localPlayer.position) : 999f;
 
         // 1. Draw overhead world nameplate when within 14 units
         Vector3 headPos = transform.position + Vector3.up * 2.2f;
@@ -205,6 +203,11 @@ public class ShopNPC : MonoBehaviour
             {
                 return pcs[i].transform;
             }
+        }
+
+        if (pcs.Length > 0 && pcs[0] != null)
+        {
+            return pcs[0].transform;
         }
 
         return null;

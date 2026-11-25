@@ -60,6 +60,8 @@ public class PlayerAttack : NetworkBehaviour
     private float pendingRange;
     private float pendingKnockback;
     private string pendingAttackName;
+    private string pendingAttackId;
+    private bool pendingIsRanged;
 
     /// <summary>Whether the player is committed to an active attack swing.</summary>
     public bool IsAttacking
@@ -169,7 +171,14 @@ public class PlayerAttack : NetworkBehaviour
             if (windupTimer <= 0f && !hasExecutedHit)
             {
                 hasExecutedHit = true;
-                ExecuteHitDetection();
+                if (pendingIsRanged)
+                {
+                    ExecuteRangedHitDetection();
+                }
+                else
+                {
+                    ExecuteHitDetection();
+                }
                 SetCombatState(PlayerCombatState.Cooldown);
             }
         }
@@ -200,6 +209,30 @@ public class PlayerAttack : NetworkBehaviour
         {
             if (attackTimer <= 0f && CurrentCombatState.Value == PlayerCombatState.Ready)
             {
+                ItemData equipped = inventory != null ? inventory.GetSelectedItem() : null;
+
+                // 1. Usable consumables (First Aid Kit)
+                if (equipped != null && equipped.Type == ItemType.Consumable)
+                {
+                    if (inventory.UseSelectedItem())
+                    {
+                        attackTimer = equipped.AttackCooldown;
+                        totalCooldown = equipped.AttackCooldown;
+                        SetCombatState(PlayerCombatState.Cooldown);
+                    }
+                    return;
+                }
+
+                // 2. Usable utility tools (Flashlight beam toggle)
+                if (equipped != null && equipped.Type == ItemType.Tool && equipped.ItemId == "flashlight")
+                {
+                    inventory.UseSelectedItem();
+                    attackTimer = 0.25f;
+                    totalCooldown = 0.25f;
+                    return;
+                }
+
+                // 3. Weapons (Melee or Ranged)
                 StartAttack();
             }
         }
@@ -219,6 +252,8 @@ public class PlayerAttack : NetworkBehaviour
         float range = equipped != null ? equipped.AttackRange : fistRange;
         float knockback = equipped != null ? equipped.KnockbackForce : fistKnockback;
         string attackName = equipped != null ? equipped.DisplayName : "Fist";
+        string attackId = equipped != null ? equipped.ItemId : "fist";
+        bool isRanged = equipped != null && equipped.Type == ItemType.RangedWeapon;
 
         attackTimer = cooldown;
         totalCooldown = cooldown;
@@ -229,6 +264,8 @@ public class PlayerAttack : NetworkBehaviour
         pendingRange = range;
         pendingKnockback = knockback;
         pendingAttackName = attackName;
+        pendingAttackId = attackId;
+        pendingIsRanged = isRanged;
 
         SetCombatState(PlayerCombatState.Attacking);
         PlayAttackFeedback(attackName, hit: false);
@@ -308,7 +345,7 @@ public class PlayerAttack : NetworkBehaviour
             {
                 PlayAttackFeedback(pendingAttackName, hit: true);
                 bool isHeavy = pendingDamage >= 35 || pendingKnockback >= 11f;
-                AttackServerRpc(netObj.NetworkObjectId, pendingDamage, hitDirection * pendingKnockback, isHeavy);
+                AttackServerRpc(netObj.NetworkObjectId, pendingDamage, hitDirection * pendingKnockback, isHeavy, isRanged: false);
                 return;
             }
 
@@ -327,8 +364,100 @@ public class PlayerAttack : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Executes ballistic raycasts, spread calculations, and visual tracers for ranged weapons (Nailgun / Shotgun).
+    /// </summary>
+    private void ExecuteRangedHitDetection()
+    {
+        if (playerCamera == null)
+        {
+            playerCamera = GetComponentInChildren<Camera>();
+            if (playerCamera == null)
+            {
+                return;
+            }
+        }
+
+        Vector3 origin = playerCamera.transform.position;
+        Vector3 forward = playerCamera.transform.forward;
+
+        if (pendingAttackId == "shotgun")
+        {
+            // Breaching Shotgun: 6 heavy buckshot pellets with spread and massive ragdoll knockback
+            int pelletCount = 6;
+            Color shotgunColor = new Color(1.0f, 0.45f, 0.15f);
+            for (int p = 0; p < pelletCount; p++)
+            {
+                Vector2 spread = Random.insideUnitCircle * 0.065f;
+                Vector3 pelletDir = (forward + playerCamera.transform.right * spread.x + playerCamera.transform.up * spread.y).normalized;
+                FireSingleRangedRay(origin, pelletDir, pendingRange, pendingDamage, pendingKnockback, isHeavy: true, shotgunColor);
+            }
+            PlayRecoilKick(4.0f);
+        }
+        else
+        {
+            // Pneumatic Nailgun: high-velocity steel rivet spike
+            Color nailColor = new Color(0.2f, 0.85f, 1.0f);
+            FireSingleRangedRay(origin, forward, pendingRange, pendingDamage, pendingKnockback, isHeavy: false, nailColor);
+            PlayRecoilKick(1.5f);
+        }
+    }
+
+    private void FireSingleRangedRay(Vector3 origin, Vector3 direction, float range, int damage, float knockback, bool isHeavy, Color tracerColor)
+    {
+        Vector3 muzzlePos = origin + playerCamera.transform.right * 0.22f - playerCamera.transform.up * 0.16f + playerCamera.transform.forward * 0.4f;
+        Vector3 endPoint = origin + direction * range;
+
+        if (Physics.Raycast(origin, direction, out RaycastHit hit, range, attackMask, QueryTriggerInteraction.Ignore))
+        {
+            if (hit.collider != null && !hit.transform.IsChildOf(transform))
+            {
+                endPoint = hit.point;
+
+                NetworkObject netObj = hit.collider.GetComponentInParent<NetworkObject>();
+                if (netObj != null)
+                {
+                    PlayAttackFeedback(pendingAttackName, hit: true);
+                    AttackServerRpc(netObj.NetworkObjectId, damage, direction * knockback, isHeavy, isRanged: true);
+                }
+                else
+                {
+                    Rigidbody targetRb = hit.collider.GetComponentInParent<Rigidbody>();
+                    if (targetRb != null)
+                    {
+                        PlayAttackFeedback(pendingAttackName, hit: true);
+                        targetRb.AddForce(direction * knockback * 22f, ForceMode.Impulse);
+                    }
+                }
+            }
+        }
+
+        CreateTracer(muzzlePos, endPoint, tracerColor);
+    }
+
+    private void PlayRecoilKick(float pitchUp)
+    {
+        if (playerCamera != null)
+        {
+            playerCamera.transform.localRotation *= Quaternion.Euler(-pitchUp, 0f, 0f);
+        }
+    }
+
+    private void CreateTracer(Vector3 start, Vector3 end, Color color)
+    {
+        GameObject tracerObj = new GameObject("RangedTracer");
+        LineRenderer lr = tracerObj.AddComponent<LineRenderer>();
+        lr.startWidth = 0.035f;
+        lr.endWidth = 0.015f;
+        lr.positionCount = 2;
+        lr.SetPosition(0, start);
+        lr.SetPosition(1, end);
+        lr.material = MaterialHelper.CreateLitMaterial(lr, color);
+        Destroy(tracerObj, 0.075f);
+    }
+
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
-    private void AttackServerRpc(ulong targetNetId, int damage, Vector3 knockbackImpulse, bool isHeavyHit = false)
+    private void AttackServerRpc(ulong targetNetId, int damage, Vector3 knockbackImpulse, bool isHeavyHit = false, bool isRanged = false)
     {
         if (NetworkManager.Singleton == null)
         {
@@ -338,7 +467,8 @@ public class PlayerAttack : NetworkBehaviour
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(targetNetId, out NetworkObject targetNetObj))
         {
             float dist = Vector3.Distance(transform.position, targetNetObj.transform.position);
-            if (dist > 7.5f)
+            float maxAllowedDist = isRanged ? 45.0f : 8.5f;
+            if (dist > maxAllowedDist)
             {
                 return;
             }

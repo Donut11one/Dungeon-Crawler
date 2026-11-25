@@ -1,0 +1,36 @@
+{
+  "scraps": [
+    {
+      "scrapId": "abnormality_core",
+      "displayName": "Monster Core",
+      "description": "Glowing bio-mechanical core salvaged from an abnormality. Highly valuable to research.",
+      "value": 100,
+      "maxStack": 10,
+      "slotColorHex": "#E633D9"
+    },
+    {
+      "scrapId": "gold_scrap",
+      "displayName": "Relic Circuitry",
+      "description": "Intact golden circuit board salvaged from pre-collapse facility machinery.",
+      "value": 150,
+      "maxStack": 10,
+      "slotColorHex": "#FFD700"
+    },
+    {
+      "scrapId": "salvaged_sensor",
+      "displayName": "Anomalous Sensor",
+      "description": "Pulsing optic array harvested from containment security drones.",
+      "value": 75,
+      "maxStack": 10,
+      "slotColorHex": "#33E699"
+    },
+    {
+      "scrapId": "scrap_metal",
+      "displayName": "Salvaged Plating",
+      "description": "Reinforced hull scrap retrieved from damaged blast doors.",
+      "value": 40,
+      "maxStack": 10,
+      "slotColorHex": "#A8B2C1"
+    }
+  ]
+}

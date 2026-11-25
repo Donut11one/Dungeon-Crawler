@@ -50,6 +50,7 @@ public class DungeonBuilder : NetworkBehaviour
 
     [Header("Prefabs")]
     [SerializeField] private GameObject enemyPrefab;
+    [SerializeField] private List<GameObject> enemyPrefabs = new();
     [SerializeField] private GameObject leverPrefab;
     [SerializeField] private GameObject doorPrefab;
 
@@ -339,26 +340,106 @@ public class DungeonBuilder : NetworkBehaviour
 
     private void EnsureEnemyPrefab()
     {
-        if (enemyPrefab != null)
+        if (enemyPrefab == null)
         {
-            return;
+#if UNITY_EDITOR
+            enemyPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Entities/EnemyPrefab.prefab");
+#endif
+
+            if (enemyPrefab == null && NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
+            {
+                foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
+                {
+                    if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<EnemyHealth>() != null)
+                    {
+                        enemyPrefab = netPrefab.Prefab;
+                        break;
+                    }
+                }
+            }
         }
 
 #if UNITY_EDITOR
-        enemyPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Entities/EnemyPrefab.prefab");
+        if (System.IO.Directory.Exists("Assets/_Project/Prefabs/Entities"))
+        {
+            string[] files = System.IO.Directory.GetFiles("Assets/_Project/Prefabs/Entities", "Enemy*.prefab");
+            for (int i = 0; i < files.Length; i++)
+            {
+                string relPath = files[i].Replace('\\', '/');
+                GameObject p = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(relPath);
+                if (p != null && !enemyPrefabs.Contains(p))
+                {
+                    enemyPrefabs.Add(p);
+                }
+            }
+        }
 #endif
+    }
 
-        if (enemyPrefab == null && NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
+    public GameObject GetEnemyPrefabForArchetype(string enemyId)
+    {
+        if (string.IsNullOrEmpty(enemyId))
+        {
+            return enemyPrefab;
+        }
+
+        string cleanId = enemyId.ToLowerInvariant().Replace("_", "");
+
+        // 1. Check inspector-assigned enemyPrefabs
+        if (enemyPrefabs != null)
+        {
+            for (int i = 0; i < enemyPrefabs.Count; i++)
+            {
+                if (enemyPrefabs[i] == null)
+                {
+                    continue;
+                }
+                string pName = enemyPrefabs[i].name.ToLowerInvariant().Replace("_", "");
+                if (pName.Contains(cleanId) || pName.Contains(enemyId.ToLowerInvariant()))
+                {
+                    return enemyPrefabs[i];
+                }
+            }
+        }
+
+        // 2. Check NetworkManager registered prefabs
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
         {
             foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
             {
                 if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<EnemyHealth>() != null)
                 {
-                    enemyPrefab = netPrefab.Prefab;
-                    break;
+                    string pName = netPrefab.Prefab.name.ToLowerInvariant().Replace("_", "");
+                    if (pName.Contains(cleanId) || pName.Contains(enemyId.ToLowerInvariant()))
+                    {
+                        return netPrefab.Prefab;
+                    }
                 }
             }
         }
+
+#if UNITY_EDITOR
+        // 3. Editor fallback to Assets/_Project/Prefabs/Entities/
+        string[] candidates = new string[]
+        {
+            $"Assets/_Project/Prefabs/Entities/Enemy_{enemyId}.prefab",
+            $"Assets/_Project/Prefabs/Entities/Enemy_{EnemyRegistry.GetEnemy(enemyId)?.displayName.Replace(" ", "")}.prefab"
+        };
+
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            if (System.IO.File.Exists(candidates[i]))
+            {
+                GameObject dedicated = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(candidates[i]);
+                if (dedicated != null)
+                {
+                    return dedicated;
+                }
+            }
+        }
+#endif
+
+        return enemyPrefab;
     }
 
     // ── Registration ─────────────────────────────────────────────────────────
@@ -376,6 +457,17 @@ public class DungeonBuilder : NetworkBehaviour
         if (enemyPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(enemyPrefab))
         {
             NetworkManager.Singleton.AddNetworkPrefab(enemyPrefab);
+        }
+
+        if (enemyPrefabs != null)
+        {
+            for (int i = 0; i < enemyPrefabs.Count; i++)
+            {
+                if (enemyPrefabs[i] != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(enemyPrefabs[i]))
+                {
+                    NetworkManager.Singleton.AddNetworkPrefab(enemyPrefabs[i]);
+                }
+            }
         }
 
         if (leverPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(leverPrefab))
@@ -599,7 +691,7 @@ public class DungeonBuilder : NetworkBehaviour
             Door.N(dw)
         );
 
-        enemySpawnPoints.Add(new Vector3(0f, 0.5f, 15f));
+        enemySpawnPoints.Add(new Vector3(0f, 0.1f, 15f));
         enemySpawnArchetypes.Add("");
 
         // ── NORTH STORAGE (10 × 8, centre 0,0,26) ───────────────────────────
@@ -614,7 +706,7 @@ public class DungeonBuilder : NetworkBehaviour
             Door.S(dw)
         );
 
-        enemySpawnPoints.Add(new Vector3(0f, 0.5f, 26f));
+        enemySpawnPoints.Add(new Vector3(0f, 0.1f, 26f));
         enemySpawnArchetypes.Add("");
 
         // ── EAST CORRIDOR (14 × 4, centre 15,0,0) ───────────────────────────
@@ -642,7 +734,7 @@ public class DungeonBuilder : NetworkBehaviour
             Door.W(dw)
         );
 
-        enemySpawnPoints.Add(new Vector3(26f, 0.5f, 3f));
+        enemySpawnPoints.Add(new Vector3(26f, 0.1f, 3f));
         enemySpawnArchetypes.Add("");
 
         // ── WEST CORRIDOR (12 × 4, centre -14,0,0) ──────────────────────────
@@ -670,7 +762,7 @@ public class DungeonBuilder : NetworkBehaviour
             Door.E(dw)
         );
 
-        enemySpawnPoints.Add(new Vector3(-23f, 0.5f, 0f));
+        enemySpawnPoints.Add(new Vector3(-23f, 0.1f, 0f));
         enemySpawnArchetypes.Add("");
     }
 
@@ -943,18 +1035,40 @@ public class DungeonBuilder : NetworkBehaviour
                 if (p > 0)
                 {
                     Vector2 packOffset = Random.insideUnitCircle * (1.1f + p * 0.4f);
-                    Vector3 testPos = spawnPos + new Vector3(packOffset.x, 0f, packOffset.y);
-                    if (NavMesh.SamplePosition(testPos, out NavMeshHit hit, 3f, NavMesh.AllAreas))
-                    {
-                        spawnPos = hit.position;
-                    }
-                    else
-                    {
-                        spawnPos = testPos;
-                    }
+                    spawnPos += new Vector3(packOffset.x, 0f, packOffset.y);
                 }
 
-                GameObject e = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
+                // Snap precisely to the floor surface / NavMesh
+                if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+                {
+                    spawnPos = hit.position;
+                }
+                else if (Physics.Raycast(spawnPos + Vector3.up * 2f, Vector3.down, out RaycastHit rayHit, 10f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    spawnPos = new Vector3(spawnPos.x, rayHit.point.y, spawnPos.z);
+                }
+
+                GameObject prefabToSpawn = GetEnemyPrefabForArchetype(chosenData != null ? chosenData.enemyId : null);
+                if (prefabToSpawn == null)
+                {
+                    prefabToSpawn = enemyPrefab;
+                }
+
+                GameObject e = Instantiate(prefabToSpawn, spawnPos, Quaternion.identity);
+
+                NavMeshAgent agent = e.GetComponent<NavMeshAgent>();
+                if (agent != null && agent.enabled)
+                {
+                    agent.baseOffset = 0f;
+                    agent.Warp(spawnPos);
+                }
+
+                BasicEnemyAI ai = e.GetComponent<BasicEnemyAI>();
+                if (ai != null)
+                {
+                    ai.SnapToGround();
+                }
+
                 NetworkObject no = e.GetComponent<NetworkObject>();
                 if (no != null)
                 {

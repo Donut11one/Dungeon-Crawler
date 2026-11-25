@@ -18,6 +18,7 @@ public static class PlayerWalletSetupHelper
         {
             EnsurePlayerWallet();
             CleanupSceneCoins();
+            EnsurePlayerCharacterModel();
         };
     }
 
@@ -62,6 +63,28 @@ public static class PlayerWalletSetupHelper
             Debug.Log($"[PlayerWalletSetupHelper] Cleaned up {removed} legacy coin objects from scene.");
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
             EditorSceneManager.SaveOpenScenes();
+        }
+    }
+
+    public static void EnsurePlayerCharacterModel()
+    {
+        string fbxPath = "Assets/_Project/Art/Models/Characters/MainCharacter_rig.fbx";
+        GameObject fbx = AssetDatabase.LoadAssetAtPath<GameObject>(fbxPath);
+        if (fbx == null)
+        {
+            return;
+        }
+
+        GameObject playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+        if (playerPrefab == null)
+        {
+            return;
+        }
+
+        Transform body = playerPrefab.transform.Find("Body");
+        if (body != null && (body.GetComponent<MeshFilter>() != null || body.childCount == 0))
+        {
+            ModelImporterWizard.AttachCharacterToPlayer(fbx);
         }
     }
 }

@@ -31,10 +31,12 @@ public class RagdollController : NetworkBehaviour
     private RigidbodyConstraints normalConstraints;
     private float normalDrag;
     private float ragdollTimer;
+    private Animator animator;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        animator = GetComponentInChildren<Animator>();
         if (rb != null)
         {
             normalConstraints = rb.constraints;
@@ -142,6 +144,15 @@ public class RagdollController : NetworkBehaviour
 
     private void EnterRagdoll()
     {
+        if (animator == null)
+        {
+            animator = GetComponentInChildren<Animator>();
+        }
+        if (animator != null)
+        {
+            animator.enabled = false;
+        }
+
         if (rb != null)
         {
             rb.constraints = RigidbodyConstraints.None;
@@ -158,6 +169,10 @@ public class RagdollController : NetworkBehaviour
 
     private void ExitRagdoll()
     {
+        if (animator != null)
+        {
+            animator.enabled = true;
+        }
         // 1. Calculate upright rotation (keep yaw facing direction, clear pitch & roll)
         float currentYaw = transform.eulerAngles.y;
         Quaternion uprightRotation = Quaternion.Euler(0f, currentYaw, 0f);
@@ -165,18 +180,15 @@ public class RagdollController : NetworkBehaviour
 
         // 2. Prevent ground/floor clipping:
         // Raycast straight down to place feet cleanly on top of the ground
-        CapsuleCollider capsule = GetComponent<CapsuleCollider>();
-        float halfHeight = capsule != null ? capsule.height * 0.5f : 1f;
-
-        Vector3 rayStart = transform.position + Vector3.up * 1.5f;
-        if (Physics.Raycast(rayStart, Vector3.down, out RaycastHit hit, 6f, ~0, QueryTriggerInteraction.Ignore))
+        Vector3 rayStart = transform.position + Vector3.up * 2f;
+        if (Physics.Raycast(rayStart, Vector3.down, out RaycastHit hit, 8f, ~0, QueryTriggerInteraction.Ignore))
         {
-            transform.position = new Vector3(transform.position.x, hit.point.y + halfHeight + 0.05f, transform.position.z);
+            transform.position = new Vector3(transform.position.x, hit.point.y, transform.position.z);
         }
         else
         {
-            // Nudge up if raycast didn't hit ground
-            transform.position += Vector3.up * 0.5f;
+            // Nudge up slightly if raycast didn't hit ground
+            transform.position += Vector3.up * 0.1f;
         }
 
         // 3. Reset physics velocity and restore constraints
