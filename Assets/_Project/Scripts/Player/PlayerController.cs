@@ -101,6 +101,17 @@ public class PlayerController : NetworkBehaviour
         currentYaw = transform.eulerAngles.y;
         lastScreenSize = new Vector2Int(Screen.width, Screen.height);
 
+        // Ensure first-person viewmodel and ranged combat modules exist
+        if (GetComponent<FirstPersonViewmodel>() == null)
+        {
+            gameObject.AddComponent<FirstPersonViewmodel>();
+        }
+
+        if (GetComponent<PlayerRangedCombat>() == null)
+        {
+            gameObject.AddComponent<PlayerRangedCombat>();
+        }
+
         // Apply zero-friction PhysicsMaterial to avoid wall-sticking and corner snagging
         CapsuleCollider capsule = GetComponent<CapsuleCollider>();
         if (capsule != null)

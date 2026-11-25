@@ -232,7 +232,13 @@ public class PlayerAttack : NetworkBehaviour
                     return;
                 }
 
-                // 3. Weapons (Melee or Ranged)
+                // 3. Ranged Weapons are handled by PlayerRangedCombat (instant fire, no punch/melee windup)
+                if (equipped != null && equipped.Type == ItemType.RangedWeapon)
+                {
+                    return;
+                }
+
+                // 4. Melee Weapons & Fists
                 StartAttack();
             }
         }

@@ -33,9 +33,14 @@ public class PlayerInventory : NetworkBehaviour
         );
     }
 
+    private Transform thirdPersonHolder;
+    private GameObject currentThirdPersonVisual;
+
     public override void OnNetworkSpawn()
     {
         ItemRegistry.Initialize();
+
+        SelectedSlotIndex.OnValueChanged += OnSelectedSlotChanged;
 
         if (IsServer)
         {
@@ -48,6 +53,96 @@ public class PlayerInventory : NetworkBehaviour
                 }
             }
         }
+
+        UpdateThirdPersonWeaponVisual(SelectedSlotIndex.Value);
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        SelectedSlotIndex.OnValueChanged -= OnSelectedSlotChanged;
+    }
+
+    private void OnSelectedSlotChanged(int previous, int current)
+    {
+        UpdateThirdPersonWeaponVisual(current);
+    }
+
+    private void UpdateThirdPersonWeaponVisual(int slotIndex)
+    {
+        if (thirdPersonHolder == null)
+        {
+            Transform handR = FindHandBone(transform);
+            if (handR != null)
+            {
+                GameObject holder = new GameObject("ThirdPersonWeaponHolder");
+                holder.transform.parent = handR;
+                holder.transform.localPosition = new Vector3(0.04f, 0.08f, 0.05f);
+                holder.transform.localRotation = Quaternion.Euler(70f, 0f, 0f);
+                thirdPersonHolder = holder.transform;
+            }
+        }
+
+        if (thirdPersonHolder == null)
+        {
+            return;
+        }
+
+        if (currentThirdPersonVisual != null)
+        {
+            Destroy(currentThirdPersonVisual);
+            currentThirdPersonVisual = null;
+        }
+
+        ItemData active = GetSelectedItem();
+        if (active == null)
+        {
+            return;
+        }
+
+        currentThirdPersonVisual = new GameObject($"TP_{active.ItemId}");
+        currentThirdPersonVisual.transform.parent = thirdPersonHolder;
+        currentThirdPersonVisual.transform.localPosition = Vector3.zero;
+        currentThirdPersonVisual.transform.localRotation = Quaternion.identity;
+
+        // Create compact third-person item mesh
+        GameObject prop = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        prop.transform.parent = currentThirdPersonVisual.transform;
+        prop.transform.localPosition = new Vector3(0f, 0f, 0.12f);
+        prop.transform.localScale = active.Type == ItemType.RangedWeapon
+            ? new Vector3(0.06f, 0.10f, 0.32f)
+            : new Vector3(0.04f, 0.04f, 0.38f);
+        prop.transform.localRotation = Quaternion.identity;
+
+        Collider col = prop.GetComponent<Collider>();
+        if (col != null)
+        {
+            Destroy(col);
+        }
+
+        Renderer rend = prop.GetComponent<Renderer>();
+        if (rend != null)
+        {
+            rend.material = MaterialHelper.CreateLitMaterial(rend, active.SlotColor);
+        }
+    }
+
+    private Transform FindHandBone(Transform current)
+    {
+        if (current.name == "Hand.R" || current.name == "Wrist.R")
+        {
+            return current;
+        }
+
+        for (int i = 0; i < current.childCount; i++)
+        {
+            Transform found = FindHandBone(current.GetChild(i));
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private void Update()

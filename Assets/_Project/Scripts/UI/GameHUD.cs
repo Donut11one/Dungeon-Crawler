@@ -355,41 +355,113 @@ public class GameHUD : MonoBehaviour
         string activeName = activeItem != null ? activeItem.DisplayName.ToUpper() : "FISTS";
         Color activeColor = activeItem != null ? activeItem.SlotColor : new Color(0.9f, 0.9f, 0.9f);
 
-        PlayerAttack localAttack = FindLocalPlayerAttack();
-        if (localAttack != null && localAttack.IsOnCooldown)
+        PlayerRangedCombat rangedCombat = FindLocalPlayerRangedCombat();
+        if (activeItem != null && activeItem.Type == ItemType.RangedWeapon && rangedCombat != null)
         {
-            float barW = 160f;
-            float barH = 4f;
-            float barX = (Screen.width - barW) * 0.5f;
-            float barY = startY - 26f;
-            float fillPct = localAttack.CooldownProgress;
-
-            DrawSolidRect(new Rect(barX - 1f, barY - 1f, barW + 2f, barH + 2f), new Color(0.05f, 0.05f, 0.05f, 0.85f));
-            DrawSolidRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.2f, 0.2f, 0.65f));
-            Color fillColor = localAttack.IsAttacking ? new Color(1f, 0.25f, 0.1f) : new Color(0.2f, 0.7f, 1f);
-            DrawSolidRect(new Rect(barX, barY, barW * fillPct, barH), fillColor);
-
-            string stateTag = localAttack.IsAttacking ? $"[ SWINGING // {activeName} ]" : $"[ RECOVERING ({localAttack.AttackTimer:0.0}s) ]";
-            Color tagColor = localAttack.IsAttacking ? new Color(1f, 0.35f, 0.15f) : new Color(0.3f, 0.8f, 1f);
-            GUIStyle tagStyle = new GUIStyle(GUI.skin.label)
+            if (rangedCombat.IsReloading)
             {
-                fontSize = 11,
-                alignment = TextAnchor.MiddleCenter,
-                fontStyle = FontStyle.Bold
-            };
-            tagStyle.normal.textColor = tagColor;
-            GUI.Label(new Rect(barX - 50f, barY - 15f, barW + 100f, 15f), stateTag, tagStyle);
+                float barW = 160f;
+                float barH = 5f;
+                float barX = (Screen.width - barW) * 0.5f;
+                float barY = startY - 26f;
+                float fillPct = rangedCombat.ReloadProgress;
+
+                DrawSolidRect(new Rect(barX - 1f, barY - 1f, barW + 2f, barH + 2f), new Color(0.05f, 0.05f, 0.05f, 0.85f));
+                DrawSolidRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.2f, 0.2f, 0.65f));
+                DrawSolidRect(new Rect(barX, barY, barW * fillPct, barH), new Color(1f, 0.85f, 0.2f));
+
+                GUIStyle reloadStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 11,
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold
+                };
+                reloadStyle.normal.textColor = new Color(1f, 0.85f, 0.2f);
+                GUI.Label(new Rect(barX - 50f, barY - 16f, barW + 100f, 16f), $"[ RELOADING... {Mathf.RoundToInt(fillPct * 100f)}% ]", reloadStyle);
+            }
+            else if (rangedCombat.CurrentAmmo == 0)
+            {
+                GUIStyle emptyStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 12,
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold
+                };
+                emptyStyle.normal.textColor = new Color(1f, 0.25f, 0.25f);
+                GUI.Label(new Rect(startX - 75f, startY - 23f, totalWidth + 150f, 20f), $"[ {activeName}  -  EMPTY! PRESS 'R' TO RELOAD ]", emptyStyle);
+            }
+            else
+            {
+                GUIStyle activeItemStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 12,
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold
+                };
+                activeItemStyle.normal.textColor = activeColor;
+                GUI.Label(new Rect(startX - 75f, startY - 23f, totalWidth + 150f, 20f), $"[ {activeName}  |  AMMO: {rangedCombat.CurrentAmmo}/{rangedCombat.MaxAmmo}  (R: Reload) ]", activeItemStyle);
+            }
         }
-        else
+        else if (activeItem != null && activeItem.Type == ItemType.Consumable)
         {
             GUIStyle activeItemStyle = new GUIStyle(GUI.skin.label)
             {
-                fontSize = 13,
+                fontSize = 12,
                 alignment = TextAnchor.MiddleCenter,
                 fontStyle = FontStyle.Bold
             };
             activeItemStyle.normal.textColor = activeColor;
-            GUI.Label(new Rect(startX - 50f, startY - 22f, totalWidth + 100f, 18f), $"[ {activeName} ]", activeItemStyle);
+            GUI.Label(new Rect(startX - 75f, startY - 23f, totalWidth + 150f, 20f), $"[ {activeName}  |  [L-Click] Heal +50 HP ]", activeItemStyle);
+        }
+        else if (activeItem != null && activeItem.ItemId == "flashlight")
+        {
+            GUIStyle activeItemStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 12,
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold
+            };
+            activeItemStyle.normal.textColor = activeColor;
+            GUI.Label(new Rect(startX - 75f, startY - 23f, totalWidth + 150f, 20f), $"[ {activeName}  |  [L-Click] Toggle Flashlight ]", activeItemStyle);
+        }
+        else
+        {
+            PlayerAttack localAttack = FindLocalPlayerAttack();
+            if (localAttack != null && localAttack.IsOnCooldown)
+            {
+                float barW = 160f;
+                float barH = 4f;
+                float barX = (Screen.width - barW) * 0.5f;
+                float barY = startY - 26f;
+                float fillPct = localAttack.CooldownProgress;
+
+                DrawSolidRect(new Rect(barX - 1f, barY - 1f, barW + 2f, barH + 2f), new Color(0.05f, 0.05f, 0.05f, 0.85f));
+                DrawSolidRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.2f, 0.2f, 0.65f));
+                Color fillColor = localAttack.IsAttacking ? new Color(1f, 0.25f, 0.1f) : new Color(0.2f, 0.7f, 1f);
+                DrawSolidRect(new Rect(barX, barY, barW * fillPct, barH), fillColor);
+
+                string stateTag = localAttack.IsAttacking ? $"[ SWINGING // {activeName} ]" : $"[ RECOVERING ({localAttack.AttackTimer:0.0}s) ]";
+                Color tagColor = localAttack.IsAttacking ? new Color(1f, 0.35f, 0.15f) : new Color(0.3f, 0.8f, 1f);
+                GUIStyle tagStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 11,
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold
+                };
+                tagStyle.normal.textColor = tagColor;
+                GUI.Label(new Rect(barX - 50f, barY - 15f, barW + 100f, 15f), stateTag, tagStyle);
+            }
+            else
+            {
+                GUIStyle activeItemStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 13,
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold
+                };
+                activeItemStyle.normal.textColor = activeColor;
+                GUI.Label(new Rect(startX - 50f, startY - 22f, totalWidth + 100f, 18f), $"[ {activeName} ]", activeItemStyle);
+            }
         }
 
         GUIStyle slotNumStyle = new GUIStyle(GUI.skin.label)
@@ -483,21 +555,40 @@ public class GameHUD : MonoBehaviour
 
         if (GameManager.Instance != null && GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby)
         {
-            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack   |   [E] Trade / Interact   |   [F] Agree to Dive", hintStyle);
+            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack / Shoot   |   [R] Reload   |   [E] Trade / Interact   |   [F] Agree to Dive", hintStyle);
         }
         else
         {
-            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack   |   [E] Grab/Drop   |   [Right Click] Throw", hintStyle);
+            GUI.Label(rect, "[WASD] Move   |   [Space] Jump   |   [1-5] Hotbar   |   [Left Click] Attack / Shoot   |   [R] Reload   |   [E] Grab/Drop   |   [Right Click] Throw", hintStyle);
         }
     }
 
     private void DrawCrosshair()
     {
         PlayerAttack attack = FindLocalPlayerAttack();
+        PlayerRangedCombat ranged = FindLocalPlayerRangedCombat();
         Color crossColor = Color.white;
         string crossChar = "+";
 
-        if (attack != null)
+        if (ranged != null && ranged.IsHoldingRangedWeapon)
+        {
+            if (ranged.IsReloading)
+            {
+                crossColor = new Color(1f, 0.85f, 0.2f, 0.9f);
+                crossChar = "⟳";
+            }
+            else if (ranged.CurrentAmmo == 0)
+            {
+                crossColor = new Color(1f, 0.25f, 0.2f, 0.9f);
+                crossChar = "!";
+            }
+            else
+            {
+                crossColor = new Color(0.2f, 1f, 0.45f, 0.95f);
+                crossChar = "+";
+            }
+        }
+        else if (attack != null)
         {
             if (attack.CurrentCombatState.Value == PlayerCombatState.Attacking)
             {
@@ -515,8 +606,20 @@ public class GameHUD : MonoBehaviour
         Rect rect = new Rect(Screen.width / 2f - 15f, Screen.height / 2f - 15f, 30f, 30f);
         GUI.Label(rect, crossChar, crosshairStyle);
 
-        // Under crosshair: Draw slim attack recharge indicator during cooldown
-        if (attack != null && attack.IsOnCooldown)
+        // Under crosshair: Draw slim reload or attack recharge indicator
+        if (ranged != null && ranged.IsHoldingRangedWeapon && ranged.IsReloading)
+        {
+            float fillPct = ranged.ReloadProgress;
+            float barW = 28f;
+            float barH = 3f;
+            float barX = Screen.width / 2f - barW * 0.5f;
+            float barY = Screen.height / 2f + 16f;
+
+            DrawSolidRect(new Rect(barX - 1f, barY - 1f, barW + 2f, barH + 2f), new Color(0.05f, 0.05f, 0.05f, 0.8f));
+            DrawSolidRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.2f, 0.2f, 0.6f));
+            DrawSolidRect(new Rect(barX, barY, barW * fillPct, barH), new Color(1f, 0.85f, 0.2f));
+        }
+        else if (attack != null && attack.IsOnCooldown)
         {
             float fillPct = attack.CooldownProgress;
             float barW = 28f;
@@ -1343,5 +1446,33 @@ public class GameHUD : MonoBehaviour
         }
 
         return playerObj.GetComponent<PlayerAttack>();
+    }
+
+    private PlayerRangedCombat FindLocalPlayerRangedCombat()
+    {
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null)
+        {
+            NetworkObject playerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
+            if (playerObj != null)
+            {
+                return playerObj.GetComponent<PlayerRangedCombat>();
+            }
+        }
+
+        PlayerController[] pcs = FindObjectsByType<PlayerController>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < pcs.Length; i++)
+        {
+            if (pcs[i] != null && pcs[i].IsOwner)
+            {
+                return pcs[i].GetComponent<PlayerRangedCombat>();
+            }
+        }
+
+        if (pcs.Length > 0 && pcs[0] != null)
+        {
+            return pcs[0].GetComponent<PlayerRangedCombat>();
+        }
+
+        return null;
     }
 }
