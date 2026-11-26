@@ -445,7 +445,7 @@ public class PlayerAttack : NetworkBehaviour
     {
         if (playerCamera != null)
         {
-            playerCamera.transform.localRotation *= Quaternion.Euler(-pitchUp, 0f, 0f);
+            playerCamera.transform.localRotation = Quaternion.identity;
         }
     }
 

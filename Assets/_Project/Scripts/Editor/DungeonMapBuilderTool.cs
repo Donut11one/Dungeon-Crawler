@@ -162,6 +162,9 @@ public class DungeonMapBuilderTool : EditorWindow
         DrawActiveToolSettingsGUI();
 
         EditorGUILayout.Space(8f);
+        DrawMaterialsAndThemesGUI();
+
+        EditorGUILayout.Space(8f);
         DrawChannelLinkingGUI();
 
         EditorGUILayout.Space(8f);
@@ -287,6 +290,76 @@ public class DungeonMapBuilderTool : EditorWindow
             _ => ""
         };
         EditorGUILayout.HelpBox(desc, MessageType.None);
+    }
+
+    private void DrawMaterialsAndThemesGUI()
+    {
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+        EditorGUILayout.LabelField("🎨 Facility Wall & Surface Materials", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox(
+            "Assign a Wall, Floor, or Ceiling material here to apply textures facility-wide.\n" +
+            "Clicking 'Apply Materials to All Walls' instantly paints all existing walls across the entire dungeon.",
+            MessageType.None
+        );
+
+        DungeonBuilder builder = FindAnyObjectByType<DungeonBuilder>();
+        if (builder != null)
+        {
+            Material currentWall = builder.WallMaterial;
+            Material newWall = (Material)EditorGUILayout.ObjectField("Wall Material", currentWall, typeof(Material), false);
+            if (newWall != currentWall)
+            {
+                builder.WallMaterial = newWall;
+                EditorUtility.SetDirty(builder);
+                builder.ApplyMaterialsToAllSceneSurfaces();
+            }
+
+            Material currentFloor = builder.FloorMaterial;
+            Material newFloor = (Material)EditorGUILayout.ObjectField("Floor Material", currentFloor, typeof(Material), false);
+            if (newFloor != currentFloor)
+            {
+                builder.FloorMaterial = newFloor;
+                EditorUtility.SetDirty(builder);
+                builder.ApplyMaterialsToAllSceneSurfaces();
+            }
+
+            Material currentCeiling = builder.CeilingMaterial;
+            Material newCeiling = (Material)EditorGUILayout.ObjectField("Ceiling Material", currentCeiling, typeof(Material), false);
+            if (newCeiling != currentCeiling)
+            {
+                builder.CeilingMaterial = newCeiling;
+                EditorUtility.SetDirty(builder);
+                builder.ApplyMaterialsToAllSceneSurfaces();
+            }
+
+            float currentTile = builder.TextureTileSize;
+            float newTile = EditorGUILayout.FloatField("Texture Tile Size (m)", currentTile);
+            if (Mathf.Abs(newTile - currentTile) > 0.01f)
+            {
+                builder.TextureTileSize = Mathf.Max(0.5f, newTile);
+                EditorUtility.SetDirty(builder);
+                builder.ApplyMaterialsToAllSceneSurfaces();
+            }
+
+            EditorGUILayout.Space(4f);
+            GUI.backgroundColor = new Color(0.4f, 0.9f, 0.6f);
+            if (GUILayout.Button("🎨 Apply Materials to All Walls in Scene", GUILayout.Height(28f)))
+            {
+                builder.ApplyMaterialsToAllSceneSurfaces();
+                EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+                if (SceneView.lastActiveSceneView != null)
+                {
+                    SceneView.lastActiveSceneView.ShowNotification(new GUIContent("🎨 Applied Materials to All Walls!"));
+                }
+            }
+            GUI.backgroundColor = Color.white;
+        }
+        else
+        {
+            EditorGUILayout.HelpBox("No DungeonBuilder found in scene. Click 'Create Dungeon Root' below first.", MessageType.Warning);
+        }
+
+        EditorGUILayout.EndVertical();
     }
 
     private void DrawChannelLinkingGUI()
@@ -1060,11 +1133,49 @@ public class DungeonMapBuilderTool : EditorWindow
         Selection.activeGameObject = leverObj;
     }
 
-    private void PlaceEnemy(GameObject parent, Vector3 pos)
+    private GameObject GetEnemyPrefab(string enemyId)
     {
+        DungeonBuilder builder = FindAnyObjectByType<DungeonBuilder>();
+        if (builder != null)
+        {
+            GameObject p = builder.GetEnemyPrefabForArchetype(enemyId);
+            if (p != null)
+            {
+                return p;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(enemyId))
+        {
+            EnemyData ed = EnemyRegistry.GetEnemy(enemyId);
+            string[] candidates = new string[]
+            {
+                $"Assets/_Project/Prefabs/Entities/Enemy_{enemyId}.prefab",
+                $"Assets/_Project/Prefabs/Entities/Enemy_{ed?.displayName.Replace(" ", "")}.prefab"
+            };
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                GameObject found = AssetDatabase.LoadAssetAtPath<GameObject>(candidates[i]);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+
         if (enemyPrefab == null)
         {
             LoadPrefabs();
+        }
+        return enemyPrefab;
+    }
+
+    private void PlaceEnemy(GameObject parent, Vector3 pos)
+    {
+        GameObject prefabToUse = GetEnemyPrefab(selectedEnemyId);
+        if (prefabToUse == null)
+        {
+            prefabToUse = enemyPrefab;
         }
 
         EnemyData data = !string.IsNullOrEmpty(selectedEnemyId) ? EnemyRegistry.GetEnemy(selectedEnemyId) : null;
@@ -1079,14 +1190,14 @@ public class DungeonMapBuilderTool : EditorWindow
                 spawnPos += new Vector3(offset.x, 0f, offset.y);
             }
 
-            GameObject enemyObj = (GameObject)PrefabUtility.InstantiatePrefab(enemyPrefab, parent.transform);
+            GameObject enemyObj = (GameObject)PrefabUtility.InstantiatePrefab(prefabToUse, parent.transform);
             enemyObj.transform.position = spawnPos;
             enemyObj.name = $"Enemy_{selectedEnemyId}";
 
-            EnemyHealth eh = enemyObj.GetComponent<EnemyHealth>();
-            if (eh != null && data != null)
+            BasicEnemyAI ai = enemyObj.GetComponent<BasicEnemyAI>();
+            if (ai != null)
             {
-                eh.ApplyEnemyData(data);
+                ai.SnapToGround();
             }
 
             Undo.RegisterCreatedObjectUndo(enemyObj, "Place Enemy");
@@ -1305,7 +1416,7 @@ public class DungeonMapBuilderTool : EditorWindow
             RoomLayoutData rData = hostRoom != null ? roomDataMap[hostRoom] : fallbackRoom;
 
             Vector3 localPos = hostRoom != null ? hostRoom.transform.InverseTransformPoint(enemy.transform.position) : enemy.transform.position;
-            string id = enemy.gameObject.name.Replace("Enemy_", "").Replace("(Clone)", "").Trim();
+            string id = DungeonBuilder.ResolveEnemyArchetypeId(enemy.gameObject.name);
 
             rData.enemySpawns.Add(new EnemyPlacementData(localPos, id));
         }
@@ -1390,6 +1501,18 @@ public class DungeonMapBuilderTool : EditorWindow
 
         EditorUtility.SetDirty(targetLayoutAsset);
         AssetDatabase.SaveAssets();
+
+        // Also ensure runtime Resources copy is kept in sync for standalone builds
+        string assetPath = AssetDatabase.GetAssetPath(targetLayoutAsset);
+        string resourcesCopyPath = "Assets/_Project/Resources/Dungeon/DefaultDungeonLayout.asset";
+        if (!string.IsNullOrEmpty(assetPath) && assetPath != resourcesCopyPath && targetLayoutAsset.name == "DefaultDungeonLayout")
+        {
+            if (System.IO.File.Exists(assetPath))
+            {
+                System.IO.File.Copy(assetPath, resourcesCopyPath, true);
+                AssetDatabase.ImportAsset(resourcesCopyPath);
+            }
+        }
 
         // Mark active scene dirty and persist scene so changes persist into Play Mode
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());

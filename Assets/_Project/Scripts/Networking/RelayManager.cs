@@ -23,7 +23,7 @@ public static class RelayManager
     public static bool UseDtlsEncryption { get; set; } = false;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStaticState()
+    public static void ResetStaticState()
     {
         IsRelayActive = false;
         IsConnecting = false;
@@ -170,6 +170,7 @@ public static class RelayManager
 
             // 4. Start Host session via NGO
             StatusMessage = "Starting Host Session...";
+            NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
             bool success = NetworkManager.Singleton.StartHost();
 
             if (success)
@@ -268,6 +269,7 @@ public static class RelayManager
 
             // 3. Start Client session via NGO
             StatusMessage = "Connecting to Host...";
+            NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
             bool success = NetworkManager.Singleton.StartClient();
 
             if (success)

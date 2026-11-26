@@ -11,7 +11,8 @@ using UnityEditor;
 public static class ItemPrefabCreator
 {
     public const string ItemPickupPrefabPath = "Assets/_Project/Prefabs/Items/ItemPickupPrefab.prefab";
-    private const string DefaultNetworkPrefabsPath = "Assets/DefaultNetworkPrefabs.asset";
+    private const string DefaultNetworkPrefabsPath = "Assets/_Project/Resources/DefaultNetworkPrefabs.asset";
+    private const string LegacyNetworkPrefabsPath = "Assets/DefaultNetworkPrefabs.asset";
 
     [InitializeOnLoadMethod]
     private static void AutoEnsureSetup()
@@ -70,6 +71,10 @@ public static class ItemPrefabCreator
     public static void RegisterInNetworkPrefabsList()
     {
         NetworkPrefabsList list = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>(DefaultNetworkPrefabsPath);
+        if (list == null)
+        {
+            list = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>(LegacyNetworkPrefabsPath);
+        }
         if (list == null)
         {
             return;

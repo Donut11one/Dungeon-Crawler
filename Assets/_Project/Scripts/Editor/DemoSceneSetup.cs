@@ -78,6 +78,7 @@ public static class DemoSceneSetup
         GameObject uiObj = new GameObject("GameUI");
         uiObj.AddComponent<LobbyUI>();
         uiObj.AddComponent<GameHUD>();
+        uiObj.AddComponent<InGameMenuUI>();
 
         // === CREATE PREFABS ===
         GameObject playerPrefab = CreatePlayerPrefab();
@@ -90,7 +91,11 @@ public static class DemoSceneSetup
         networkManager.NetworkConfig.PlayerPrefab = playerPrefab;
 
         // Assign DefaultNetworkPrefabs list so NGO serializes all prefabs into the scene
-        NetworkPrefabsList defaultList = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>("Assets/DefaultNetworkPrefabs.asset");
+        NetworkPrefabsList defaultList = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>("Assets/_Project/Resources/DefaultNetworkPrefabs.asset");
+        if (defaultList == null)
+        {
+            defaultList = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>("Assets/DefaultNetworkPrefabs.asset");
+        }
         if (defaultList != null)
         {
             networkManager.NetworkConfig.Prefabs.NetworkPrefabsLists.Add(defaultList);
@@ -106,6 +111,17 @@ public static class DemoSceneSetup
         SerializedObject so = new SerializedObject(dungeonBuilder);
         so.FindProperty("barrelPrefab").objectReferenceValue = barrelPrefab;
         so.FindProperty("enemyPrefab").objectReferenceValue = enemyPrefab;
+
+        DungeonLayoutData layoutAsset = AssetDatabase.LoadAssetAtPath<DungeonLayoutData>("Assets/_Project/Resources/Dungeon/DefaultDungeonLayout.asset");
+        if (layoutAsset == null)
+        {
+            layoutAsset = AssetDatabase.LoadAssetAtPath<DungeonLayoutData>("Assets/_Project/ScriptableObjects/Dungeon/DefaultDungeonLayout.asset");
+        }
+        if (layoutAsset != null)
+        {
+            so.FindProperty("activeLayout").objectReferenceValue = layoutAsset;
+            so.FindProperty("mapSource").enumValueIndex = (int)DungeonMapSource.DesignedAsset;
+        }
         so.ApplyModifiedProperties();
         EditorUtility.SetDirty(gameManagerObj);
 

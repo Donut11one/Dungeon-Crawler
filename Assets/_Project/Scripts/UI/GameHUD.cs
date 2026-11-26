@@ -36,14 +36,38 @@ public class GameHUD : MonoBehaviour
     private static int quotaCelebrationPointsAdded;
     private static int quotaCelebrationTotalPoints;
     private static int quotaCelebrationNextTarget;
+    private static int quotaCelebrationDays = 3;
+    private static bool isQuotaAlert = false;
+    private static string quotaBannerTitle = "";
+    private static string quotaBannerSubtitle = "";
 
-    public static void TriggerQuotaCelebration(ulong clientId, int pointsAdded, int totalPoints, int nextTarget)
+    public static void TriggerCrewQuotaCelebration(int pointsAdded, int totalPoints, int nextTarget, int days)
     {
-        quotaCelebrationClientId = clientId;
+        isQuotaAlert = false;
         quotaCelebrationPointsAdded = pointsAdded;
         quotaCelebrationTotalPoints = totalPoints;
         quotaCelebrationNextTarget = nextTarget;
-        quotaCelebrationTimer = 4.5f;
+        quotaCelebrationDays = days;
+        quotaBannerTitle = "★ CREW PROFIT QUOTA MET! ★";
+        quotaBannerSubtitle = $"+{pointsAdded} PRESTIGE POINT! (Total: {totalPoints} PTS)  |  Next Target: ${nextTarget} ({days} Dives Left)";
+        quotaCelebrationTimer = 5.0f;
+    }
+
+    public static void TriggerQuotaDeadlineFailed(int penaltyDeducted, int remainingCredits, int nextTarget)
+    {
+        isQuotaAlert = true;
+        quotaCelebrationPointsAdded = 0;
+        quotaCelebrationTotalPoints = 0;
+        quotaCelebrationNextTarget = nextTarget;
+        quotaCelebrationDays = 3;
+        quotaBannerTitle = "⚠ QUOTA DEADLINE EXPIRED! ⚠";
+        quotaBannerSubtitle = $"Disciplinary Fine: -${penaltyDeducted} Crew Funds (Balance: ${remainingCredits}) | Reset to Tier 1: ${nextTarget} (3 Days)";
+        quotaCelebrationTimer = 5.0f;
+    }
+
+    public static void TriggerQuotaCelebration(ulong clientId, int pointsAdded, int totalPoints, int nextTarget)
+    {
+        TriggerCrewQuotaCelebration(pointsAdded, totalPoints, nextTarget, 3);
     }
 
     // Tracks which players escaped and their banked money (populated via RPC from GameManager)
@@ -174,7 +198,7 @@ public class GameHUD : MonoBehaviour
     {
         InitStyles();
 
-        if (NetworkManager.Singleton == null)
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening)
         {
             return;
         }
@@ -183,7 +207,12 @@ public class GameHUD : MonoBehaviour
             return;
         }
 
-        // When the Armory Shop is open, suppress HUD to prevent any visual overlap
+        // When the InGameMenuUI (Pause / Leave menu) or Armory Shop is open, suppress HUD to prevent any visual overlap
+        if (InGameMenuUI.Instance != null && InGameMenuUI.Instance.IsOpen)
+        {
+            return;
+        }
+
         if (ArmoryShopUI.Instance != null && ArmoryShopUI.Instance.IsOpen)
         {
             return;
@@ -238,7 +267,7 @@ public class GameHUD : MonoBehaviour
             total = LobbyArea.Instance.TotalPlayers.Value;
             countdown = LobbyArea.Instance.DiveCountdown.Value;
         }
-        else if (NetworkManager.Singleton != null)
+        else if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && NetworkManager.Singleton.ConnectedClientsList != null)
         {
             total = NetworkManager.Singleton.ConnectedClientsList.Count;
         }
@@ -423,6 +452,22 @@ public class GameHUD : MonoBehaviour
             };
             activeItemStyle.normal.textColor = activeColor;
             GUI.Label(new Rect(startX - 75f, startY - 23f, totalWidth + 150f, 20f), $"[ {activeName}  |  [L-Click] Toggle Flashlight ]", activeItemStyle);
+        }
+        else if (activeItem != null && activeItem.Type == ItemType.Scrap)
+        {
+            GUIStyle activeItemStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 12,
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold
+            };
+            activeItemStyle.normal.textColor = activeColor;
+            int totalVal = activeItem.BuyPrice;
+            if (inventory.Slots != null && selectedSlot >= 0 && selectedSlot < inventory.Slots.Count)
+            {
+                totalVal *= inventory.Slots[selectedSlot].count;
+            }
+            GUI.Label(new Rect(startX - 75f, startY - 23f, totalWidth + 150f, 20f), $"[ {activeName}  |  SALVAGE VALUE: ${totalVal}  (Sell at Shop) ]", activeItemStyle);
         }
         else
         {
@@ -911,40 +956,46 @@ public class GameHUD : MonoBehaviour
 
     private void DrawMoney()
     {
-        PlayerWallet localWallet = FindLocalPlayerWallet();
-        if (localWallet == null)
-        {
-            return;
-        }
+        int crewCredits = (GameManager.Instance != null && GameManager.Instance.IsSpawned)
+            ? GameManager.Instance.GroupCredits.Value
+            : 150;
+
+        PlayerInventory localInventory = FindLocalPlayerInventory();
+        int carriedScrapValue = localInventory != null ? localInventory.GetCarriedScrapValue() : 0;
 
         bool inLobby = GameManager.Instance != null &&
                        GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby;
 
-        // In lobby: show total accumulated money; in run: show money collected this run (starts at 0)
-        int displayAmount = inLobby ? localWallet.BankedMoney.Value : localWallet.RunMoney.Value;
-        string moneyLabel = inLobby ? $"BANK: ${displayAmount}" : $"RUN: ${displayAmount}";
+        string moneyLabel = inLobby
+            ? $"COMPANY FUNDS: ${crewCredits}"
+            : (carriedScrapValue > 0 ? $"FUNDS: ${crewCredits}  |  CARRIED: +${carriedScrapValue}" : $"FUNDS: ${crewCredits}");
 
-        Rect rect = new Rect(20f, Screen.height - 84f, 220f, 26f);
+        Rect rect = new Rect(20f, Screen.height - 84f, 320f, 26f);
         GUI.Label(rect, moneyLabel, moneyStyle);
     }
 
     private void DrawQuotaHUD()
     {
-        PlayerWallet wallet = FindLocalPlayerWallet();
-        if (wallet == null)
-        {
-            return;
-        }
-
         float boxX = 20f;
         float boxY = Screen.height - 128f;
-        float boxW = 240f;
+        float boxW = 270f;
         float boxH = 38f;
 
-        int progress = wallet.QuotaProgress.Value;
-        int target = wallet.QuotaTarget.Value > 0 ? wallet.QuotaTarget.Value : 100;
-        int points = wallet.QuotaPoints.Value;
-        int runMoney = wallet.RunMoney.Value;
+        int progress = (GameManager.Instance != null && GameManager.Instance.IsSpawned)
+            ? GameManager.Instance.QuotaProgress.Value
+            : 0;
+        int target = (GameManager.Instance != null && GameManager.Instance.IsSpawned && GameManager.Instance.QuotaTarget.Value > 0)
+            ? GameManager.Instance.QuotaTarget.Value
+            : 250;
+        int points = (GameManager.Instance != null && GameManager.Instance.IsSpawned)
+            ? GameManager.Instance.QuotaPoints.Value
+            : 0;
+        int days = (GameManager.Instance != null && GameManager.Instance.IsSpawned)
+            ? GameManager.Instance.DaysRemaining.Value
+            : 3;
+
+        PlayerInventory localInventory = FindLocalPlayerInventory();
+        int carriedScrap = localInventory != null ? localInventory.GetCarriedScrapValue() : 0;
 
         bool inLobby = GameManager.Instance != null &&
                        GameManager.Instance.CurrentState.Value == GameManager.GameState.Lobby;
@@ -962,28 +1013,29 @@ public class GameHUD : MonoBehaviour
 
         GUIStyle pointsBadgeStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 13,
+            fontSize = 12,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.UpperRight
         };
         pointsBadgeStyle.normal.textColor = new Color(1f, 0.85f, 0.2f); // Golden Star
 
-        int projectedTotal = inLobby ? progress : progress + runMoney;
+        int projectedTotal = inLobby ? progress : progress + carriedScrap;
         bool willMeetQuota = projectedTotal >= target;
+        string daysTag = inLobby ? $"{days}D REMAIN" : $"{days}D";
 
         if (willMeetQuota && !inLobby)
         {
             quotaLabelStyle.normal.textColor = new Color(0.25f, 1f, 0.35f);
-            GUI.Label(new Rect(boxX + 6f, boxY + 2f, 160f, 18f), $"QUOTA: ${progress} (+${runMoney}) / ${target}", quotaLabelStyle);
+            GUI.Label(new Rect(boxX + 6f, boxY + 2f, 175f, 18f), $"QUOTA: ${progress} (+${carriedScrap}) / ${target}", quotaLabelStyle);
         }
         else
         {
             quotaLabelStyle.normal.textColor = new Color(0.75f, 0.88f, 1f);
-            string extraText = (!inLobby && runMoney > 0) ? $" (+${runMoney})" : "";
-            GUI.Label(new Rect(boxX + 6f, boxY + 2f, 160f, 18f), $"QUOTA: ${progress}{extraText} / ${target}", quotaLabelStyle);
+            string extraText = (!inLobby && carriedScrap > 0) ? $" (+${carriedScrap})" : "";
+            GUI.Label(new Rect(boxX + 6f, boxY + 2f, 175f, 18f), $"QUOTA: ${progress}{extraText} / ${target}", quotaLabelStyle);
         }
 
-        GUI.Label(new Rect(boxX + boxW - 85f, boxY + 2f, 79f, 18f), $"★ {points} PTS", pointsBadgeStyle);
+        GUI.Label(new Rect(boxX + boxW - 90f, boxY + 2f, 84f, 18f), $"★{points} | {daysTag}", pointsBadgeStyle);
 
         // Progress bar track & fill
         float barX = boxX + 6f;
@@ -996,14 +1048,14 @@ public class GameHUD : MonoBehaviour
         float basePct = Mathf.Clamp01((float)progress / target);
         float projectedPct = Mathf.Clamp01((float)projectedTotal / target);
 
-        // Projected progress fill (faint cyan/green)
+        // Projected progress fill (cyan/green)
         if (projectedPct > basePct)
         {
             Color projColor = willMeetQuota ? new Color(0.2f, 0.85f, 0.3f, 0.55f) : new Color(0.2f, 0.6f, 0.9f, 0.45f);
             DrawSolidRect(new Rect(barX, barY, barW * projectedPct, barH), projColor);
         }
 
-        // Secured progress fill
+        // Secured progress fill (gold)
         if (basePct > 0f)
         {
             Color fillColor = new Color(1f, 0.82f, 0.15f);
@@ -1020,21 +1072,18 @@ public class GameHUD : MonoBehaviour
 
         quotaCelebrationTimer -= Time.deltaTime;
 
-        bool isLocal = (NetworkManager.Singleton != null && quotaCelebrationClientId == NetworkManager.Singleton.LocalClientId);
-        string title = isLocal ? "★ QUOTA COMPLETED! ★" : $"PLAYER {quotaCelebrationClientId + 1} MET QUOTA!";
-        string subtitle = isLocal
-            ? $"+{quotaCelebrationPointsAdded} POINT! (Total: {quotaCelebrationTotalPoints} PTS)  |  Next Quota: ${quotaCelebrationNextTarget}"
-            : $"Earned +{quotaCelebrationPointsAdded} Point! (Total: {quotaCelebrationTotalPoints} PTS)";
+        Color headerColor = isQuotaAlert ? new Color(1f, 0.25f, 0.25f) : new Color(1f, 0.88f, 0.15f);
+        Color borderColor = isQuotaAlert ? new Color(1f, 0.3f, 0.3f, 0.95f) : new Color(1f, 0.85f, 0.1f, 0.95f);
 
-        float bannerW = 600f;
+        float bannerW = 640f;
         float bannerH = 75f;
         float bannerX = (Screen.width - bannerW) * 0.5f;
         float bannerY = 95f;
 
-        // Dark banner backdrop with gold accent
+        // Dark banner backdrop with accent
         DrawSolidRect(new Rect(bannerX, bannerY, bannerW, bannerH), new Color(0.04f, 0.07f, 0.12f, 0.94f));
-        DrawSolidRect(new Rect(bannerX, bannerY, bannerW, 3f), new Color(1f, 0.85f, 0.1f, 0.95f));
-        DrawSolidRect(new Rect(bannerX, bannerY + bannerH - 2f, bannerW, 2f), new Color(1f, 0.85f, 0.1f, 0.6f));
+        DrawSolidRect(new Rect(bannerX, bannerY, bannerW, 3f), borderColor);
+        DrawSolidRect(new Rect(bannerX, bannerY + bannerH - 2f, bannerW, 2f), borderColor);
 
         GUIStyle titleStyle = new GUIStyle(GUI.skin.label)
         {
@@ -1042,28 +1091,28 @@ public class GameHUD : MonoBehaviour
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter
         };
-        titleStyle.normal.textColor = new Color(1f, 0.88f, 0.15f);
-        GUI.Label(new Rect(bannerX, bannerY + 8f, bannerW, 30f), title, titleStyle);
+        titleStyle.normal.textColor = headerColor;
+        GUI.Label(new Rect(bannerX, bannerY + 8f, bannerW, 30f), quotaBannerTitle, titleStyle);
 
         GUIStyle subStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 15,
+            fontSize = 14,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter
         };
         subStyle.normal.textColor = Color.white;
-        GUI.Label(new Rect(bannerX, bannerY + 40f, bannerW, 24f), subtitle, subStyle);
+        GUI.Label(new Rect(bannerX, bannerY + 40f, bannerW, 24f), quotaBannerSubtitle, subStyle);
     }
 
     private void DrawConnectionInfo()
     {
-        if (NetworkManager.Singleton == null)
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening)
         {
             return;
         }
 
         string role = NetworkManager.Singleton.IsHost ? "Host" : "Client";
-        int playerCount = NetworkManager.Singleton.ConnectedClientsList.Count;
+        int playerCount = (NetworkManager.Singleton.ConnectedClientsList != null) ? NetworkManager.Singleton.ConnectedClientsList.Count : 1;
         string relayTag = RelayManager.IsRelayActive ? $" | Code: {RelayManager.CurrentJoinCode}" : "";
 
         Rect rect = new Rect(Screen.width - 340f, Screen.height - 35f, 330f, 25f);
@@ -1118,11 +1167,11 @@ public class GameHUD : MonoBehaviour
 
             // Count connected active players
             int activePlayerCount = 0;
-            if (NetworkManager.Singleton != null)
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && NetworkManager.Singleton.ConnectedClientsList != null)
             {
                 foreach (NetworkClient client in NetworkManager.Singleton.ConnectedClientsList)
                 {
-                    if (client.PlayerObject != null)
+                    if (client != null && client.PlayerObject != null)
                     {
                         activePlayerCount++;
                     }
@@ -1195,11 +1244,11 @@ public class GameHUD : MonoBehaviour
             // Per-player results
             float startY = cardY + headerSpace + 6f;
             int i = 0;
-            if (NetworkManager.Singleton != null)
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && NetworkManager.Singleton.ConnectedClientsList != null)
             {
                 foreach (NetworkClient client in NetworkManager.Singleton.ConnectedClientsList)
                 {
-                    if (client.PlayerObject == null)
+                    if (client == null || client.PlayerObject == null)
                     {
                         continue;
                     }
@@ -1209,10 +1258,10 @@ public class GameHUD : MonoBehaviour
                     bool isLocal = cid == NetworkManager.Singleton.LocalClientId;
 
                     PlayerWallet wallet = client.PlayerObject.GetComponent<PlayerWallet>();
-                    int bank = wallet != null ? wallet.BankedMoney.Value : 0;
-                    int points = wallet != null ? wallet.QuotaPoints.Value : 0;
-                    int qProg = wallet != null ? wallet.QuotaProgress.Value : 0;
-                    int qTarg = wallet != null ? wallet.QuotaTarget.Value : 100;
+                    int bank = (GameManager.Instance != null && GameManager.Instance.IsSpawned) ? GameManager.Instance.GroupCredits.Value : (wallet != null ? wallet.BankedMoney.Value : 150);
+                    int qProg = (GameManager.Instance != null && GameManager.Instance.IsSpawned) ? GameManager.Instance.QuotaProgress.Value : 0;
+                    int qTarg = (GameManager.Instance != null && GameManager.Instance.IsSpawned && GameManager.Instance.QuotaTarget.Value > 0) ? GameManager.Instance.QuotaTarget.Value : 250;
+                    int points = (GameManager.Instance != null && GameManager.Instance.IsSpawned) ? GameManager.Instance.QuotaPoints.Value : 0;
 
                     float rowY = startY + i * rowHeight;
 
@@ -1243,7 +1292,7 @@ public class GameHUD : MonoBehaviour
                     }
 
                     rightStyle.normal.textColor = new Color(1f, 0.85f, 0.2f);
-                    GUI.Label(new Rect(cardX + 484f, rowY, 212f, rowHeight - 4f), $"${bank} (Q: {qProg}/{qTarg})", rightStyle);
+                    GUI.Label(new Rect(cardX + 484f, rowY, 212f, rowHeight - 4f), $"CREW: ${bank} (Q: {qProg}/{qTarg})", rightStyle);
 
                     i++;
                 }
@@ -1283,6 +1332,11 @@ public class GameHUD : MonoBehaviour
             return;
         }
 
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening)
+        {
+            return;
+        }
+
         ulong localId = NetworkManager.Singleton.LocalClientId;
         int bankedAmount = extractedThisRound.ContainsKey(localId) ? extractedThisRound[localId].bankedAmount : 0;
 
@@ -1317,7 +1371,7 @@ public class GameHUD : MonoBehaviour
             return;
         }
 
-        if (NetworkManager.Singleton == null)
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening || NetworkManager.Singleton.ConnectedClientsList == null)
         {
             return;
         }
@@ -1335,14 +1389,14 @@ public class GameHUD : MonoBehaviour
 
         foreach (NetworkClient client in NetworkManager.Singleton.ConnectedClientsList)
         {
-            if (client.PlayerObject == null)
+            if (client == null || client.PlayerObject == null)
             {
                 continue;
             }
 
-            PlayerWallet wallet = client.PlayerObject.GetComponent<PlayerWallet>();
-            int runMoney = wallet != null ? wallet.RunMoney.Value : 0;
-            int points = wallet != null ? wallet.QuotaPoints.Value : 0;
+            PlayerInventory inv = client.PlayerObject.GetComponent<PlayerInventory>();
+            int carriedScrap = inv != null ? inv.GetCarriedScrapValue() : 0;
+            string valueDisplay = carriedScrap > 0 ? $"+${carriedScrap} scrap" : "$0";
 
             bool escaped = extractedThisRound.ContainsKey(client.ClientId);
             string escapedTag = escaped ? " ✓" : "";
@@ -1352,8 +1406,8 @@ public class GameHUD : MonoBehaviour
                 ? new Color(0.2f, 1f, 0.2f)
                 : (isLocal ? new Color(1f, 0.85f, 0f) : Color.white);
 
-            GUI.Label(new Rect(x - 50f, y + i * 24f, 230f, 22f),
-                $"P{client.ClientId + 1}: ${runMoney} [★{points}]{escapedTag}", sbStyle);
+            GUI.Label(new Rect(x - 60f, y + i * 24f, 250f, 22f),
+                $"P{client.ClientId + 1}: {valueDisplay}{escapedTag}", sbStyle);
             i++;
         }
     }

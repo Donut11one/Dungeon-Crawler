@@ -59,4 +59,40 @@ public static class MaterialHelper
             rend.sharedMaterial = mat;
         }
     }
+
+    /// <summary>
+    /// Safely applies a custom material (or texture) with automatic UV tiling based on surface dimensions.
+    /// Prevents textures from stretching on long walls or wide floors.
+    /// </summary>
+    public static void ApplyCustomMaterial(Renderer rend, Material baseMat, Color fallbackColor, Vector3 scale, float tileSize = 4f)
+    {
+        if (rend == null)
+        {
+            return;
+        }
+
+        if (baseMat == null)
+        {
+            ApplyMaterial(rend, fallbackColor);
+            return;
+        }
+
+        float tile = tileSize > 0.1f ? tileSize : 4f;
+        float horizSpan = Mathf.Max(scale.x, scale.z);
+        float vertSpan = scale.y > 0.5f ? scale.y : Mathf.Min(scale.x, scale.z);
+
+        if (Application.isPlaying)
+        {
+            Material inst = new Material(baseMat);
+            if (inst.mainTexture != null)
+            {
+                inst.mainTextureScale = new Vector2(horizSpan / tile, vertSpan / tile);
+            }
+            rend.material = inst;
+        }
+        else
+        {
+            rend.sharedMaterial = baseMat;
+        }
+    }
 }

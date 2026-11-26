@@ -16,6 +16,8 @@ public class LobbyUI : MonoBehaviour
         LocalLan = 1
     }
 
+    public static string DisconnectNotice = string.Empty;
+
     private ConnectionMode currentMode = ConnectionMode.LocalLan;
     private string relayJoinCode = string.Empty;
     private string lanAddress = "127.0.0.1";
@@ -26,12 +28,29 @@ public class LobbyUI : MonoBehaviour
         // Enforce VSync and frame cap as soon as the lobby UI loads to protect GPU/CPU
         QualitySettings.vSyncCount = 1;
         Application.targetFrameRate = 60;
+
+        // Ensure InGameMenuUI exists so the pause/leave menu and disconnect callbacks are active
+        if (FindAnyObjectByType<InGameMenuUI>() == null)
+        {
+            gameObject.AddComponent<InGameMenuUI>();
+        }
     }
 
     private void Start()
     {
+        NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+    }
+
+    private void Update()
+    {
+        bool isConnected = NetworkManager.Singleton != null && (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer);
+        if (!isConnected && Cursor.lockState != CursorLockMode.None)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
     }
 
     private void OnDestroy()
@@ -71,6 +90,35 @@ public class LobbyUI : MonoBehaviour
         float boxHeight = 370f;
         float x = (Screen.width - boxWidth) * 0.5f;
         float y = (Screen.height - boxHeight) * 0.5f;
+
+        // Disconnect notice banner if disconnected or kicked back to lobby
+        if (!string.IsNullOrEmpty(DisconnectNotice))
+        {
+            float bannerW = Mathf.Max(boxWidth, 520f);
+            float bannerH = 46f;
+            float bx = (Screen.width - bannerW) * 0.5f;
+            float by = Mathf.Max(12f, y - bannerH - 12f);
+
+            DrawRect(new Rect(bx - 2f, by - 2f, bannerW + 4f, bannerH + 4f), new Color(1f, 0.35f, 0.25f, 0.95f));
+            DrawRect(new Rect(bx, by, bannerW, bannerH), new Color(0.14f, 0.05f, 0.05f, 0.98f));
+
+            GUIStyle noticeStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 12,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft
+            };
+            noticeStyle.normal.textColor = new Color(1f, 0.8f, 0.8f);
+
+            GUI.Label(new Rect(bx + 14f, by, bannerW - 120f, bannerH), $"⚠ {DisconnectNotice}", noticeStyle);
+
+            GUI.backgroundColor = new Color(0.9f, 0.3f, 0.3f);
+            if (GUI.Button(new Rect(bx + bannerW - 95f, by + 10f, 85f, 26f), "DISMISS"))
+            {
+                DisconnectNotice = string.Empty;
+            }
+            GUI.backgroundColor = Color.white;
+        }
 
         // Background box
         DrawRect(new Rect(x - 2f, y - 2f, boxWidth + 4f, boxHeight + 4f), new Color(0.15f, 0.75f, 0.95f, 0.9f));
@@ -135,6 +183,7 @@ public class LobbyUI : MonoBehaviour
         float btnW = width - 80f;
         if (GUI.Button(new Rect(x + 40f, y + 26f, btnW, 36f), busy ? "CONNECTING..." : "HOST ONLINE GAME (GET JOIN CODE)"))
         {
+            NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
             _ = RelayManager.StartHostWithRelayAsync(4);
         }
 
@@ -166,6 +215,7 @@ public class LobbyUI : MonoBehaviour
 
         if (GUI.Button(new Rect(x + 40f, y + 150f, btnW, 34f), busy ? "JOINING..." : "JOIN ONLINE GAME"))
         {
+            NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
             _ = RelayManager.StartClientWithRelayAsync(relayJoinCode);
         }
 
@@ -210,6 +260,7 @@ public class LobbyUI : MonoBehaviour
         // --- LOCAL HOST ---
         if (GUI.Button(new Rect(x + 40f, y + 26f, btnW, 36f), "HOST LOCAL GAME"))
         {
+            NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
             UnityTransport transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             if (transport != null)
             {
@@ -238,6 +289,7 @@ public class LobbyUI : MonoBehaviour
 
         if (GUI.Button(new Rect(x + 40f, y + 144f, btnW, 34f), "JOIN LOCAL GAME"))
         {
+            NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
             UnityTransport transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             if (transport != null)
             {

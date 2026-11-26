@@ -35,7 +35,7 @@ public class DungeonBuilder : NetworkBehaviour
     // ── Inspector ────────────────────────────────────────────────────────────
     [Header("Level Design Data")]
     [Tooltip("How the dungeon map is chosen when starting a run.")]
-    [SerializeField] private DungeonMapSource mapSource = DungeonMapSource.AutoDetect;
+    [SerializeField] private DungeonMapSource mapSource = DungeonMapSource.DesignedAsset;
 
     [Tooltip("Primary layout asset used when Map Source is AutoDetect or DesignedAsset.")]
     [SerializeField] private DungeonLayoutData activeLayout;
@@ -57,10 +57,20 @@ public class DungeonBuilder : NetworkBehaviour
     [Header("Default Fallback Quantities")]
     [SerializeField] private int enemyCount = 2;
 
-    [Header("Colors")]
+    [Header("Colors & Materials")]
     [SerializeField] private Color floorColor = new Color(0.25f, 0.25f, 0.28f);
     [SerializeField] private Color wallColor = new Color(0.35f, 0.32f, 0.30f);
     [SerializeField] private Color ceilingColor = new Color(0.20f, 0.20f, 0.22f);
+
+    [Header("Global Facility Materials (Applies to All Walls & Surfaces)")]
+    [Tooltip("Optional global wall material applied to ALL walls across the entire dungeon.")]
+    [SerializeField] private Material wallMaterial;
+    [Tooltip("Optional global floor material applied to ALL floors across the entire dungeon.")]
+    [SerializeField] private Material floorMaterial;
+    [Tooltip("Optional global ceiling material applied to ALL ceilings across the entire dungeon.")]
+    [SerializeField] private Material ceilingMaterial;
+    [Tooltip("Tile repeat size in meters for textures (e.g. 4 repeats every 4 meters).")]
+    [SerializeField] private float textureTileSize = 4f;
 
     // ── Network State ────────────────────────────────────────────────────────
     public NetworkVariable<FixedString64Bytes> SynchronizedLayoutName = new NetworkVariable<FixedString64Bytes>(
@@ -146,6 +156,54 @@ public class DungeonBuilder : NetworkBehaviour
         }
     }
 
+    public Material WallMaterial
+    {
+        get
+        {
+            return wallMaterial;
+        }
+        set
+        {
+            wallMaterial = value;
+        }
+    }
+
+    public Material FloorMaterial
+    {
+        get
+        {
+            return floorMaterial;
+        }
+        set
+        {
+            floorMaterial = value;
+        }
+    }
+
+    public Material CeilingMaterial
+    {
+        get
+        {
+            return ceilingMaterial;
+        }
+        set
+        {
+            ceilingMaterial = value;
+        }
+    }
+
+    public float TextureTileSize
+    {
+        get
+        {
+            return textureTileSize;
+        }
+        set
+        {
+            textureTileSize = value;
+        }
+    }
+
     public Vector3 GetPlayerSpawnPoint(int index)
     {
         if (playerSpawnPoints.Count == 0)
@@ -198,8 +256,24 @@ public class DungeonBuilder : NetworkBehaviour
 
     private DungeonLayoutData LoadDefaultLayoutAsset()
     {
+        // 1. Try Resources folder (works in Editor AND Standalone Builds!)
+        DungeonLayoutData asset = Resources.Load<DungeonLayoutData>("Dungeon/DefaultDungeonLayout");
+        if (asset != null)
+        {
+            return asset;
+        }
+
 #if UNITY_EDITOR
-        DungeonLayoutData asset = UnityEditor.AssetDatabase.LoadAssetAtPath<DungeonLayoutData>(
+        // 2. Editor AssetDatabase fallback
+        asset = UnityEditor.AssetDatabase.LoadAssetAtPath<DungeonLayoutData>(
+            "Assets/_Project/Resources/Dungeon/DefaultDungeonLayout.asset"
+        );
+        if (asset != null)
+        {
+            return asset;
+        }
+
+        asset = UnityEditor.AssetDatabase.LoadAssetAtPath<DungeonLayoutData>(
             "Assets/_Project/ScriptableObjects/Dungeon/DefaultDungeonLayout.asset"
         );
         if (asset != null)
@@ -210,9 +284,71 @@ public class DungeonBuilder : NetworkBehaviour
         return null;
     }
 
+    /// <summary>
+    /// Resolves any GameObject name (e.g. "Enemy_flesh_brute (1)", "Enemy_FleshBrute", "EnemyPrefab")
+    /// into a valid registered archetype ID from Enemies.json.
+    /// </summary>
+    public static string ResolveEnemyArchetypeId(string rawName)
+    {
+        if (string.IsNullOrEmpty(rawName))
+        {
+            return "basic_abnormality";
+        }
+
+        string clean = rawName.Replace("(Clone)", "").Trim();
+        int parenIdx = clean.IndexOf('(');
+        if (parenIdx >= 0)
+        {
+            clean = clean.Substring(0, parenIdx).Trim();
+        }
+
+        if (clean.StartsWith("Enemy_"))
+        {
+            clean = clean.Substring(6).Trim();
+        }
+        else if (clean.StartsWith("Enemy"))
+        {
+            clean = clean.Substring(5).Trim();
+        }
+
+        if (string.IsNullOrEmpty(clean) || clean.Equals("Prefab", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return "basic_abnormality";
+        }
+
+        EnemyRegistry.Initialize();
+        EnemyData exact = EnemyRegistry.GetEnemy(clean);
+        if (exact != null && !string.IsNullOrEmpty(exact.enemyId) && exact.enemyId.Equals(clean, System.StringComparison.OrdinalIgnoreCase))
+        {
+            return exact.enemyId;
+        }
+
+        string normalized = clean.ToLowerInvariant().Replace("_", "").Replace(" ", "");
+        List<EnemyData> all = EnemyRegistry.GetAllEnemies();
+        if (all != null)
+        {
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (all[i] == null)
+                {
+                    continue;
+                }
+                string candId = all[i].enemyId.ToLowerInvariant().Replace("_", "");
+                string candDisplay = all[i].displayName.ToLowerInvariant().Replace(" ", "").Replace("_", "");
+                if (normalized == candId || normalized == candDisplay || normalized.Contains(candId) || candId.Contains(normalized))
+                {
+                    return all[i].enemyId;
+                }
+            }
+        }
+
+        return "basic_abnormality";
+    }
+
     // ── Unity / NGO lifecycle ────────────────────────────────────────────────
     private void Awake()
     {
+        NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
         EnsureLeverPrefab();
         EnsureDoorPrefab();
         EnsureEnemyPrefab();
@@ -340,13 +476,32 @@ public class DungeonBuilder : NetworkBehaviour
 
     private void EnsureEnemyPrefab()
     {
+        // 1. If enemyPrefab is not assigned, load base from NetworkPrefabBootstrapper
         if (enemyPrefab == null)
         {
+            enemyPrefab = NetworkPrefabBootstrapper.GetBaseEnemyPrefab();
+        }
+
+        // 2. Direct Resources fallback
+        if (enemyPrefab == null)
+        {
+            enemyPrefab = Resources.Load<GameObject>("Prefabs/Entities/EnemyPrefab");
+        }
+        if (enemyPrefab == null)
+        {
+            enemyPrefab = Resources.Load<GameObject>("Entities/EnemyPrefab");
+        }
+
 #if UNITY_EDITOR
+        if (enemyPrefab == null)
+        {
             enemyPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/Entities/EnemyPrefab.prefab");
+        }
 #endif
 
-            if (enemyPrefab == null && NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
+        if (enemyPrefab == null && NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null && NetworkManager.Singleton.NetworkConfig.Prefabs != null)
+        {
+            if (NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs != null)
             {
                 foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
                 {
@@ -356,6 +511,39 @@ public class DungeonBuilder : NetworkBehaviour
                         break;
                     }
                 }
+            }
+
+            if (enemyPrefab == null && NetworkManager.Singleton.NetworkConfig.Prefabs.NetworkPrefabsLists != null)
+            {
+                foreach (var prefabsList in NetworkManager.Singleton.NetworkConfig.Prefabs.NetworkPrefabsLists)
+                {
+                    if (prefabsList == null || prefabsList.PrefabList == null)
+                    {
+                        continue;
+                    }
+                    foreach (var netPrefab in prefabsList.PrefabList)
+                    {
+                        if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<EnemyHealth>() != null)
+                        {
+                            enemyPrefab = netPrefab.Prefab;
+                            break;
+                        }
+                    }
+                    if (enemyPrefab != null)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 3. Populate archetype enemyPrefabs list from NetworkPrefabBootstrapper (works in Standalone Builds!)
+        List<GameObject> bootstrapperEnemies = NetworkPrefabBootstrapper.GetLoadedEnemyPrefabs();
+        for (int i = 0; i < bootstrapperEnemies.Count; i++)
+        {
+            if (bootstrapperEnemies[i] != null && !enemyPrefabs.Contains(bootstrapperEnemies[i]))
+            {
+                enemyPrefabs.Add(bootstrapperEnemies[i]);
             }
         }
 
@@ -378,14 +566,23 @@ public class DungeonBuilder : NetworkBehaviour
 
     public GameObject GetEnemyPrefabForArchetype(string enemyId)
     {
+        if (enemyPrefabs == null || enemyPrefabs.Count == 0)
+        {
+            EnsureEnemyPrefab();
+        }
+
         if (string.IsNullOrEmpty(enemyId))
         {
             return enemyPrefab;
         }
 
-        string cleanId = enemyId.ToLowerInvariant().Replace("_", "");
+        EnemyRegistry.Initialize();
+        EnemyData targetData = EnemyRegistry.GetEnemy(enemyId);
 
-        // 1. Check inspector-assigned enemyPrefabs
+        string cleanId = enemyId.ToLowerInvariant().Replace("_", "").Replace(" ", "");
+        string targetDisplay = targetData != null ? targetData.displayName.ToLowerInvariant().Replace("_", "").Replace(" ", "") : "";
+
+        // 1. Check inspector-assigned and bootstrapper-loaded enemyPrefabs
         if (enemyPrefabs != null)
         {
             for (int i = 0; i < enemyPrefabs.Count; i++)
@@ -394,8 +591,37 @@ public class DungeonBuilder : NetworkBehaviour
                 {
                     continue;
                 }
-                string pName = enemyPrefabs[i].name.ToLowerInvariant().Replace("_", "");
-                if (pName.Contains(cleanId) || pName.Contains(enemyId.ToLowerInvariant()))
+                string pName = enemyPrefabs[i].name.ToLowerInvariant().Replace("_", "").Replace(" ", "");
+                if (pName.Contains(cleanId) || (!string.IsNullOrEmpty(targetDisplay) && pName.Contains(targetDisplay)))
+                {
+                    return enemyPrefabs[i];
+                }
+                // Handle alias matching:
+                // "swarm_crawler" / "Hive Swarmer" -> "Enemy_HiveSwarmer"
+                if (cleanId.Contains("swarm") && pName.Contains("swarm"))
+                {
+                    return enemyPrefabs[i];
+                }
+                if (cleanId.Contains("crawler") && (pName.Contains("swarm") || pName.Contains("crawler")))
+                {
+                    return enemyPrefabs[i];
+                }
+                // "shadow_stalker" / "Shadow Prowler" -> "Enemy_ShadowProwler"
+                if (cleanId.Contains("shadow") && (pName.Contains("shadow") || pName.Contains("prowler")))
+                {
+                    return enemyPrefabs[i];
+                }
+                if (cleanId.Contains("stalker") && (pName.Contains("prowler") || pName.Contains("stalker")))
+                {
+                    return enemyPrefabs[i];
+                }
+                // "flesh_brute" -> "Enemy_FleshBrute"
+                if (cleanId.Contains("brute") && pName.Contains("brute"))
+                {
+                    return enemyPrefabs[i];
+                }
+                // "scrap_scavenger" -> "Enemy_ScrapScavenger"
+                if (cleanId.Contains("scavenger") && pName.Contains("scavenger"))
                 {
                     return enemyPrefabs[i];
                 }
@@ -403,16 +629,19 @@ public class DungeonBuilder : NetworkBehaviour
         }
 
         // 2. Check NetworkManager registered prefabs
-        if (NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null)
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.NetworkConfig != null && NetworkManager.Singleton.NetworkConfig.Prefabs != null)
         {
-            foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
+            if (NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs != null)
             {
-                if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<EnemyHealth>() != null)
+                foreach (var netPrefab in NetworkManager.Singleton.NetworkConfig.Prefabs.Prefabs)
                 {
-                    string pName = netPrefab.Prefab.name.ToLowerInvariant().Replace("_", "");
-                    if (pName.Contains(cleanId) || pName.Contains(enemyId.ToLowerInvariant()))
+                    if (netPrefab.Prefab != null && netPrefab.Prefab.GetComponent<EnemyHealth>() != null)
                     {
-                        return netPrefab.Prefab;
+                        string pName = netPrefab.Prefab.name.ToLowerInvariant().Replace("_", "").Replace(" ", "");
+                        if (pName.Contains(cleanId) || (!string.IsNullOrEmpty(targetDisplay) && pName.Contains(targetDisplay)))
+                        {
+                            return netPrefab.Prefab;
+                        }
                     }
                 }
             }
@@ -484,6 +713,24 @@ public class DungeonBuilder : NetworkBehaviour
     // ── Layout Assembly ──────────────────────────────────────────────────────
     public void BuildDungeon()
     {
+        // Capture any scene-placed enemies before clearing, so manually placed monsters are never lost
+        List<Vector3> prePlacedPositions = new List<Vector3>();
+        List<string> prePlacedArchetypes = new List<string>();
+
+        EnemyHealth[] sceneEnemies = FindObjectsByType<EnemyHealth>(FindObjectsInactive.Exclude);
+        if (sceneEnemies != null && sceneEnemies.Length > 0)
+        {
+            for (int e = 0; e < sceneEnemies.Length; e++)
+            {
+                if (sceneEnemies[e] != null)
+                {
+                    prePlacedPositions.Add(sceneEnemies[e].transform.position);
+                    string archId = ResolveEnemyArchetypeId(sceneEnemies[e].gameObject.name);
+                    prePlacedArchetypes.Add(archId);
+                }
+            }
+        }
+
         ClearDungeonHierarchy();
 
         dungeonRoot = new GameObject("Dungeon");
@@ -501,6 +748,36 @@ public class DungeonBuilder : NetworkBehaviour
         else
         {
             BuildDefaultLayout();
+        }
+
+        // Merge any scene-placed monsters so manually placed monsters are NEVER lost
+        if (prePlacedPositions.Count > 0)
+        {
+            int adoptedCount = 0;
+            for (int i = 0; i < prePlacedPositions.Count; i++)
+            {
+                bool alreadyCovered = false;
+                for (int s = 0; s < enemySpawnPoints.Count; s++)
+                {
+                    if (Vector3.Distance(enemySpawnPoints[s], prePlacedPositions[i]) < 1.5f)
+                    {
+                        alreadyCovered = true;
+                        break;
+                    }
+                }
+
+                if (!alreadyCovered)
+                {
+                    enemySpawnPoints.Add(prePlacedPositions[i]);
+                    enemySpawnArchetypes.Add(prePlacedArchetypes[i]);
+                    adoptedCount++;
+                }
+            }
+
+            if (adoptedCount > 0)
+            {
+                Debug.Log($"[DungeonBuilder] Adopted {adoptedCount} pre-placed monsters from the scene into spawn list.");
+            }
         }
 
         // NavMesh surface on dungeon root
@@ -838,10 +1115,10 @@ public class DungeonBuilder : NetworkBehaviour
         dungeonRooms.Add(room);
 
         // Floor
-        Prim(go.transform, "Floor", Vector3.zero, new Vector3(width, 0.2f, depth), floorCol);
+        Prim(go.transform, "Floor", Vector3.zero, new Vector3(width, 0.2f, depth), floorCol, floorMaterial);
 
         // Ceiling
-        Prim(go.transform, "Ceiling", new Vector3(0f, wallHeight, 0f), new Vector3(width, 0.2f, depth), ceilingCol);
+        Prim(go.transform, "Ceiling", new Vector3(0f, wallHeight, 0f), new Vector3(width, 0.2f, depth), ceilingCol, ceilingMaterial);
 
         // Four walls (with doorway cuts)
         BuildWall(go.transform, Door.Side.N, width, depth, wallCol, doors);
@@ -939,7 +1216,7 @@ public class DungeonBuilder : NetworkBehaviour
             Vector3 scale = nsWall
                 ? new Vector3(span, wallHeight, wallThickness)
                 : new Vector3(wallThickness, wallHeight, span);
-            Prim(parent, $"Wall{side}", wallCentre, scale, wallCol);
+            Prim(parent, $"Wall{side}", wallCentre, scale, wallCol, wallMaterial);
             return;
         }
 
@@ -961,7 +1238,7 @@ public class DungeonBuilder : NetworkBehaviour
             Vector3 scale = nsWall
                 ? new Vector3(leftLen, wallHeight, wallThickness)
                 : new Vector3(wallThickness, wallHeight, leftLen);
-            Prim(parent, $"Wall{side}_L", pos, scale, wallCol);
+            Prim(parent, $"Wall{side}_L", pos, scale, wallCol, wallMaterial);
         }
 
         float rightLen = halfSpan - gapR;
@@ -972,11 +1249,16 @@ public class DungeonBuilder : NetworkBehaviour
             Vector3 scale = nsWall
                 ? new Vector3(rightLen, wallHeight, wallThickness)
                 : new Vector3(wallThickness, wallHeight, rightLen);
-            Prim(parent, $"Wall{side}_R", pos, scale, wallCol);
+            Prim(parent, $"Wall{side}_R", pos, scale, wallCol, wallMaterial);
         }
     }
 
     private void Prim(Transform parent, string label, Vector3 localPos, Vector3 scale, Color color, Vector3? localEuler = null)
+    {
+        Prim(parent, label, localPos, scale, color, null, localEuler);
+    }
+
+    private void Prim(Transform parent, string label, Vector3 localPos, Vector3 scale, Color color, Material customMat, Vector3? localEuler = null)
     {
         GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
         obj.name = label;
@@ -992,18 +1274,101 @@ public class DungeonBuilder : NetworkBehaviour
         Renderer rend = obj.GetComponent<Renderer>();
         if (rend != null)
         {
-            MaterialHelper.ApplyMaterial(rend, color);
+            if (customMat != null)
+            {
+                MaterialHelper.ApplyCustomMaterial(rend, customMat, color, scale, textureTileSize);
+            }
+            else
+            {
+                MaterialHelper.ApplyMaterial(rend, color);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies the assigned wallMaterial, floorMaterial, and ceilingMaterial to all existing
+    /// room surfaces in the scene. Useful for live preview in the Editor or updating textures at runtime.
+    /// </summary>
+    public void ApplyMaterialsToAllSceneSurfaces()
+    {
+        DungeonRoom[] rooms = FindObjectsByType<DungeonRoom>(FindObjectsInactive.Exclude);
+        if (rooms == null || rooms.Length == 0)
+        {
+            return;
+        }
+
+        for (int r = 0; r < rooms.Length; r++)
+        {
+            DungeonRoom rm = rooms[r];
+            if (rm == null)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < rm.transform.childCount; i++)
+            {
+                Transform child = rm.transform.GetChild(i);
+                Renderer rend = child.GetComponent<Renderer>();
+                if (rend == null)
+                {
+                    continue;
+                }
+
+                if (child.name.StartsWith("Wall"))
+                {
+                    if (wallMaterial != null)
+                    {
+                        MaterialHelper.ApplyCustomMaterial(rend, wallMaterial, wallColor, child.localScale, textureTileSize);
+                    }
+                    else
+                    {
+                        MaterialHelper.ApplyMaterial(rend, wallColor);
+                    }
+                }
+                else if (child.name == "Floor")
+                {
+                    if (floorMaterial != null)
+                    {
+                        MaterialHelper.ApplyCustomMaterial(rend, floorMaterial, floorColor, child.localScale, textureTileSize);
+                    }
+                    else
+                    {
+                        MaterialHelper.ApplyMaterial(rend, floorColor);
+                    }
+                }
+                else if (child.name == "Ceiling")
+                {
+                    if (ceilingMaterial != null)
+                    {
+                        MaterialHelper.ApplyCustomMaterial(rend, ceilingMaterial, ceilingColor, child.localScale, textureTileSize);
+                    }
+                    else
+                    {
+                        MaterialHelper.ApplyMaterial(rend, ceilingColor);
+                    }
+                }
+            }
         }
     }
 
     // ── Entity Spawning ──────────────────────────────────────────────────────
     private void SpawnEnemies()
     {
+        NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
         EnsureEnemyPrefab();
 
         if (enemyPrefab == null)
         {
-            Debug.LogWarning("[DungeonBuilder] No enemy prefab assigned.");
+            List<GameObject> loadedEnemies = NetworkPrefabBootstrapper.GetLoadedEnemyPrefabs();
+            if (loadedEnemies != null && loadedEnemies.Count > 0)
+            {
+                enemyPrefab = loadedEnemies[0];
+            }
+        }
+
+        if (enemyPrefab == null)
+        {
+            Debug.LogError("[DungeonBuilder] No enemy prefab assigned or available in DefaultNetworkPrefabs! Cannot spawn enemies.");
             return;
         }
 
@@ -1011,6 +1376,8 @@ public class DungeonBuilder : NetworkBehaviour
         bool isAuthored = layout != null && layout.rooms.Count > 0;
         int count = isAuthored ? enemySpawnPoints.Count : Mathf.Min(enemyCount, enemySpawnPoints.Count);
         List<EnemyData> allEnemies = EnemyRegistry.GetAllEnemies();
+
+        Debug.Log($"[DungeonBuilder] Spawning enemies: PointsCount={enemySpawnPoints.Count}, IsAuthored={isAuthored}, LayoutName={(layout != null ? layout.layoutName : "None")}, TargetToSpawn={count}");
 
         for (int i = 0; i < count; i++)
         {
@@ -1054,38 +1421,83 @@ public class DungeonBuilder : NetworkBehaviour
                     prefabToSpawn = enemyPrefab;
                 }
 
-                GameObject e = Instantiate(prefabToSpawn, spawnPos, Quaternion.identity);
-
-                NavMeshAgent agent = e.GetComponent<NavMeshAgent>();
-                if (agent != null && agent.enabled)
+                if (prefabToSpawn == null)
                 {
-                    agent.baseOffset = 0f;
-                    agent.Warp(spawnPos);
+                    Debug.LogError($"[DungeonBuilder] Could not find any enemy prefab for index {i} ({chosenData?.enemyId})");
+                    continue;
                 }
 
-                BasicEnemyAI ai = e.GetComponent<BasicEnemyAI>();
-                if (ai != null)
+                try
                 {
-                    ai.SnapToGround();
-                }
+                    GameObject e = Instantiate(prefabToSpawn, spawnPos, Quaternion.identity);
 
-                NetworkObject no = e.GetComponent<NetworkObject>();
-                if (no != null)
+                    NavMeshAgent agent = e.GetComponent<NavMeshAgent>();
+                    if (agent != null && agent.enabled)
+                    {
+                        agent.baseOffset = 0f;
+                        agent.Warp(spawnPos);
+                    }
+
+                    BasicEnemyAI ai = e.GetComponent<BasicEnemyAI>();
+                    if (ai != null)
+                    {
+                        ai.SnapToGround();
+                    }
+
+                    NetworkObject no = e.GetComponent<NetworkObject>();
+                    if (no != null)
+                    {
+                        try
+                        {
+                            no.Spawn();
+                        }
+                        catch (System.Exception spawnEx)
+                        {
+                            Debug.LogError($"[DungeonBuilder] Failed to network spawn {prefabToSpawn.name}: {spawnEx.Message}. Retrying with base enemyPrefab...");
+                            if (prefabToSpawn != enemyPrefab && enemyPrefab != null)
+                            {
+                                Destroy(e);
+                                e = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
+                                agent = e.GetComponent<NavMeshAgent>();
+                                if (agent != null && agent.enabled)
+                                {
+                                    agent.baseOffset = 0f;
+                                    agent.Warp(spawnPos);
+                                }
+                                ai = e.GetComponent<BasicEnemyAI>();
+                                if (ai != null)
+                                {
+                                    ai.SnapToGround();
+                                }
+                                no = e.GetComponent<NetworkObject>();
+                                if (no != null)
+                                {
+                                    no.Spawn();
+                                }
+                            }
+                            else
+                            {
+                                throw;
+                            }
+                        }
+                    }
+
+                    EnemyHealth eh = e.GetComponent<EnemyHealth>();
+                    if (eh != null && chosenData != null)
+                    {
+                        eh.ApplyEnemyData(chosenData);
+                    }
+
+                    spawnedEnemies.Add(e);
+                }
+                catch (System.Exception ex)
                 {
-                    no.Spawn();
+                    Debug.LogError($"[DungeonBuilder] Exception spawning enemy #{i} ({chosenData?.enemyId}) at {spawnPos}: {ex}");
                 }
-
-                EnemyHealth eh = e.GetComponent<EnemyHealth>();
-                if (eh != null && chosenData != null)
-                {
-                    eh.ApplyEnemyData(chosenData);
-                }
-
-                spawnedEnemies.Add(e);
             }
         }
 
-        Debug.Log($"[DungeonBuilder] Spawned {spawnedEnemies.Count} enemies across the dungeon.");
+        Debug.Log($"[DungeonBuilder] Successfully spawned {spawnedEnemies.Count} enemies across the dungeon.");
     }
 
     private void SpawnModularFeatures()
@@ -1200,6 +1612,7 @@ public class DungeonBuilder : NetworkBehaviour
     {
         EnsureLeverPrefab();
         EnsureDoorPrefab();
+        EnsureEnemyPrefab();
         currentResolvedLayout = GetResolvedLayout();
         BuildDungeon();
         CreateExtractionPoint();
@@ -1213,10 +1626,112 @@ public class DungeonBuilder : NetworkBehaviour
             }
         }
 
+        SpawnEnemiesInEditor();
+
         if (navSurface != null)
         {
             navSurface.BuildNavMesh();
         }
+    }
+
+    private DungeonRoom FindClosestRoom(Vector3 pos, DungeonRoom[] rooms)
+    {
+        if (rooms == null || rooms.Length == 0)
+        {
+            return null;
+        }
+
+        DungeonRoom closest = null;
+        float bestDistSq = float.MaxValue;
+        for (int i = 0; i < rooms.Length; i++)
+        {
+            if (rooms[i] == null)
+            {
+                continue;
+            }
+            float distSq = (rooms[i].transform.position - pos).sqrMagnitude;
+            if (distSq < bestDistSq)
+            {
+                bestDistSq = distSq;
+                closest = rooms[i];
+            }
+        }
+        return closest;
+    }
+
+    private void SpawnEnemiesInEditor()
+    {
+        EnsureEnemyPrefab();
+
+        if (enemySpawnPoints == null || enemySpawnPoints.Count == 0)
+        {
+            return;
+        }
+
+        EnemyRegistry.Initialize();
+        List<EnemyData> allEnemies = EnemyRegistry.GetAllEnemies();
+
+        for (int i = 0; i < enemySpawnPoints.Count; i++)
+        {
+            string targetId = i < enemySpawnArchetypes.Count ? enemySpawnArchetypes[i] : null;
+            EnemyData chosenData = null;
+
+            if (!string.IsNullOrEmpty(targetId))
+            {
+                chosenData = EnemyRegistry.GetEnemy(targetId);
+            }
+
+            if (chosenData == null && allEnemies != null && allEnemies.Count > 0)
+            {
+                chosenData = allEnemies[i % allEnemies.Count];
+            }
+
+            Vector3 spawnPos = enemySpawnPoints[i];
+
+            GameObject prefabToSpawn = GetEnemyPrefabForArchetype(chosenData != null ? chosenData.enemyId : null);
+            if (prefabToSpawn == null)
+            {
+                prefabToSpawn = enemyPrefab;
+            }
+
+            if (prefabToSpawn == null)
+            {
+                continue;
+            }
+
+            // Find parent room or dungeonRoot
+            Transform parent = dungeonRoot != null ? dungeonRoot.transform : null;
+            if (dungeonRooms != null && dungeonRooms.Count > 0)
+            {
+                DungeonRoom closestRoom = FindClosestRoom(spawnPos, dungeonRooms.ToArray());
+                if (closestRoom != null)
+                {
+                    parent = closestRoom.transform;
+                }
+            }
+
+            GameObject enemyObj = (GameObject)UnityEditor.PrefabUtility.InstantiatePrefab(prefabToSpawn, parent);
+            if (enemyObj == null)
+            {
+                enemyObj = Instantiate(prefabToSpawn, spawnPos, Quaternion.identity, parent);
+            }
+            else
+            {
+                enemyObj.transform.position = spawnPos;
+                enemyObj.transform.rotation = Quaternion.identity;
+            }
+
+            string enemyNameId = chosenData != null ? chosenData.enemyId : (targetId ?? "basic_abnormality");
+            enemyObj.name = $"Enemy_{enemyNameId}";
+
+            BasicEnemyAI ai = enemyObj.GetComponent<BasicEnemyAI>();
+            if (ai != null)
+            {
+                ai.SnapToGround();
+            }
+        }
+
+        Debug.Log($"[DungeonBuilder] Spawned {enemySpawnPoints.Count} monster previews in editor.");
     }
 
     public void ClearDungeonInEditor()

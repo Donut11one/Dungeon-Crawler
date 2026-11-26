@@ -295,44 +295,31 @@ public class EnemyHealth : NetworkBehaviour, IDamageable
             return;
         }
 
-        List<GameObject> candidates = new List<GameObject>();
-        if (dropPrefabs != null)
-        {
-            for (int i = 0; i < dropPrefabs.Length; i++)
-            {
-                if (dropPrefabs[i] != null)
-                {
-                    candidates.Add(dropPrefabs[i]);
-                }
-            }
-        }
+        string enemyType = EnemyId.Value.ToString();
+        List<LootDropResult> drops = LootRegistry.RollLoot(enemyType);
 
-        if (candidates.Count == 0)
+        if (drops == null || drops.Count == 0)
         {
             return;
         }
 
-        int count = Random.Range(minDropCount, maxDropCount + 1);
-        for (int i = 0; i < count; i++)
+        Vector3 origin = transform.position + Vector3.up * 0.6f;
+
+        for (int i = 0; i < drops.Count; i++)
         {
-            GameObject prefab = candidates[Random.Range(0, candidates.Count)];
-            Vector2 circle = Random.insideUnitCircle.normalized * Random.Range(0.4f, 1.2f);
-            Vector3 spawnPos = transform.position + new Vector3(circle.x, 0.4f, circle.y);
-
-            GameObject droppedObj = Instantiate(prefab, spawnPos, Quaternion.identity);
-            NetworkObject netObj = droppedObj.GetComponent<NetworkObject>();
-            if (netObj != null)
+            LootDropResult drop = drops[i];
+            if (string.IsNullOrEmpty(drop.ItemId))
             {
-                netObj.Spawn();
+                continue;
             }
 
-            // Scatter impulse if it has physics
-            Rigidbody rb = droppedObj.GetComponent<Rigidbody>();
-            if (rb != null)
-            {
-                Vector3 impulse = new Vector3(circle.x, 1.5f, circle.y).normalized * dropScatterForce;
-                rb.AddForce(impulse, ForceMode.Impulse);
-            }
+            Vector2 circle = Random.insideUnitCircle.normalized * Random.Range(0.5f, 1.3f);
+            Vector3 spawnPos = origin + new Vector3(circle.x, 0.2f, circle.y);
+            Vector3 scatterVelocity = new Vector3(circle.x, 2.4f, circle.y).normalized * dropScatterForce;
+
+            WorldItemPickup.SpawnPickup(drop.ItemId, drop.Count, spawnPos, scatterVelocity);
         }
+
+        Debug.Log($"[EnemyHealth] {DisplayName} ({enemyType}) dropped {drops.Count} salvage parts via LootTables.json.");
     }
 }

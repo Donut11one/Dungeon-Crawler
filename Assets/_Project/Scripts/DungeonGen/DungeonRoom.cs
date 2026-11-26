@@ -19,6 +19,21 @@ public class DungeonRoom : MonoBehaviour
     [Header("Doorways")]
     [SerializeField] private List<DoorwayDefinition> doorways = new List<DoorwayDefinition>();
 
+    [Header("Appearance Overrides")]
+    [SerializeField] private Material roomWallMaterial;
+
+    public Material RoomWallMaterial
+    {
+        get
+        {
+            return roomWallMaterial;
+        }
+        set
+        {
+            roomWallMaterial = value;
+        }
+    }
+
     private readonly List<GameObject> spawnedFeatures = new List<GameObject>();
 
     public List<DoorwayDefinition> Doorways
@@ -207,7 +222,24 @@ public class DungeonRoom : MonoBehaviour
         Renderer rend = cube.GetComponent<Renderer>();
         if (rend != null)
         {
-            MaterialHelper.ApplyMaterial(rend, color);
+            Material matToUse = roomWallMaterial;
+            if (matToUse == null)
+            {
+                DungeonBuilder db = FindAnyObjectByType<DungeonBuilder>();
+                if (db != null)
+                {
+                    matToUse = db.WallMaterial;
+                }
+            }
+
+            if (matToUse != null)
+            {
+                MaterialHelper.ApplyCustomMaterial(rend, matToUse, color, localScale);
+            }
+            else
+            {
+                MaterialHelper.ApplyMaterial(rend, color);
+            }
         }
 
 #if UNITY_EDITOR

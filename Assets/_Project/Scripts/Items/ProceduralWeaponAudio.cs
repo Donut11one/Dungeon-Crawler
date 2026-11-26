@@ -12,6 +12,16 @@ public static class ProceduralWeaponAudio
     private static AudioClip reloadClip;
     private static AudioClip nailImpactClip;
     private static AudioClip healClip;
+    private static AudioClip coinClinkClip;
+
+    public static AudioClip GetCoinClinkClip()
+    {
+        if (coinClinkClip == null)
+        {
+            coinClinkClip = CreateCoinClinkSound();
+        }
+        return coinClinkClip;
+    }
 
     public static AudioClip GetNailgunShotClip()
     {
@@ -194,6 +204,27 @@ public static class ProceduralWeaponAudio
         }
 
         AudioClip clip = AudioClip.Create("HealChime", samples, 1, sampleRate, false);
+        clip.SetData(data, 0);
+        return clip;
+    }
+
+    private static AudioClip CreateCoinClinkSound()
+    {
+        int sampleRate = 44100;
+        int samples = (int)(sampleRate * 0.28f); // 280ms coin jingling clink
+        float[] data = new float[samples];
+
+        for (int i = 0; i < samples; i++)
+        {
+            float t = (float)i / sampleRate;
+            float envelope = Mathf.Exp(-t * 16f);
+            float tone1 = Mathf.Sin(2f * Mathf.PI * 1850f * t);
+            float tone2 = Mathf.Sin(2f * Mathf.PI * 2480f * t);
+            float tone3 = Mathf.Sin(2f * Mathf.PI * 3200f * t);
+            data[i] = (tone1 * 0.4f + tone2 * 0.35f + tone3 * 0.25f) * envelope * 0.75f;
+        }
+
+        AudioClip clip = AudioClip.Create("CoinClink", samples, 1, sampleRate, false);
         clip.SetData(data, 0);
         return clip;
     }

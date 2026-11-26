@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -32,6 +33,7 @@ public class PlayerRangedCombat : NetworkBehaviour
     private FirstPersonViewmodel viewmodel;
     private Camera playerCam;
     private AudioSource audioSource;
+    private float cameraRecoilOffset = 0f;
 
     public bool IsHoldingRangedWeapon
     {
@@ -112,6 +114,20 @@ public class PlayerRangedCombat : NetworkBehaviour
         audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.spatialBlend = 0f; // 2D local player weapon audio
         audioSource.volume = 0.85f;
+
+        if (playerCam != null)
+        {
+            playerCam.transform.localRotation = Quaternion.identity;
+        }
+    }
+
+    private void OnDisable()
+    {
+        cameraRecoilOffset = 0f;
+        if (playerCam != null)
+        {
+            playerCam.transform.localRotation = Quaternion.identity;
+        }
     }
 
     public override void OnNetworkSpawn()
@@ -135,6 +151,25 @@ public class PlayerRangedCombat : NetworkBehaviour
         if (viewmodel == null)
         {
             viewmodel = GetComponent<FirstPersonViewmodel>();
+        }
+
+        // Smooth spring recovery for camera recoil offset
+        if (cameraRecoilOffset > 0.001f)
+        {
+            cameraRecoilOffset = Mathf.Lerp(cameraRecoilOffset, 0f, Time.deltaTime * 18f);
+            if (cameraRecoilOffset < 0.001f)
+            {
+                cameraRecoilOffset = 0f;
+            }
+
+            if (playerCam != null)
+            {
+                playerCam.transform.localRotation = Quaternion.Euler(-cameraRecoilOffset, 0f, 0f);
+            }
+        }
+        else if (playerCam != null && playerCam.transform.localRotation != Quaternion.identity)
+        {
+            playerCam.transform.localRotation = Quaternion.identity;
         }
 
         // Update fire cooldown timer
@@ -288,7 +323,7 @@ public class PlayerRangedCombat : NetworkBehaviour
             return;
         }
 
-        Vector3 spawnPos = playerCam.transform.position + playerCam.transform.forward * 0.45f + playerCam.transform.right * 0.18f - playerCam.transform.up * 0.12f;
+        Vector3 spawnPos = playerCam.transform.position + playerCam.transform.forward * 0.25f + playerCam.transform.right * 0.16f - playerCam.transform.up * 0.10f;
         Vector3 aimDir = playerCam.transform.forward;
 
         // Launch physical ballistic nail projectile
@@ -297,7 +332,7 @@ public class PlayerRangedCombat : NetworkBehaviour
         nailObj.transform.forward = aimDir;
 
         NailProjectile nail = nailObj.AddComponent<NailProjectile>();
-        nail.Initialize(aimDir, weapon.Damage, weapon.KnockbackForce, OwnerClientId);
+        nail.Initialize(aimDir, weapon.Damage, weapon.KnockbackForce, transform, this);
 
         // Also broadcast fired effect to other clients
         FireRangedVisualClientRpc(spawnPos, aimDir, isShotgun: false);
@@ -315,6 +350,10 @@ public class PlayerRangedCombat : NetworkBehaviour
         int pelletCount = 8;
         float range = 18f;
 
+        // Group hits by entity root transform so every connected pellet contributes to the total burst damage
+        Dictionary<Transform, ShotgunTargetHit> targetHits = new Dictionary<Transform, ShotgunTargetHit>();
+        Dictionary<Rigidbody, Vector3> propImpulses = new Dictionary<Rigidbody, Vector3>();
+
         for (int p = 0; p < pelletCount; p++)
         {
             Vector2 spread = Random.insideUnitCircle * 0.068f;
@@ -322,31 +361,55 @@ public class PlayerRangedCombat : NetworkBehaviour
 
             Vector3 endPoint = origin + pelletDir * range;
 
-            if (Physics.Raycast(origin, pelletDir, out RaycastHit hit, range, hitMask, QueryTriggerInteraction.Ignore))
+            Ray ray = new Ray(origin, pelletDir);
+            RaycastHit hit;
+            bool hasHit = Physics.Raycast(ray, out hit, range, hitMask, QueryTriggerInteraction.Ignore);
+
+            if (!hasHit)
             {
-                if (hit.collider != null && !hit.transform.IsChildOf(transform))
+                // Fallback SphereCast with radius 0.12f catches fast-moving abnormalities and limbs
+                hasHit = Physics.SphereCast(ray, 0.12f, out hit, range, hitMask, QueryTriggerInteraction.Ignore);
+            }
+
+            if (hasHit && hit.collider != null && !hit.transform.IsChildOf(transform))
+            {
+                endPoint = hit.point;
+
+                Transform rootTransform = hit.collider.transform.root;
+                NetworkObject netObj = hit.collider.GetComponentInParent<NetworkObject>();
+                IDamageable damageable = hit.collider.GetComponentInParent<IDamageable>();
+                if (damageable == null && netObj != null)
                 {
-                    endPoint = hit.point;
+                    damageable = netObj.GetComponent<IDamageable>() ?? netObj.GetComponentInChildren<IDamageable>();
+                }
 
-                    // Hit entity
-                    NetworkObject netObj = hit.collider.GetComponentInParent<NetworkObject>();
-                    IDamageable damageable = hit.collider.GetComponentInParent<IDamageable>();
-
-                    if (netObj != null)
+                if (netObj != null || damageable != null)
+                {
+                    if (!targetHits.TryGetValue(rootTransform, out ShotgunTargetHit targetHit))
                     {
-                        // Heavy knockback triggers immediate ragdoll on abnormalities and players!
-                        RangedAttackServerRpc(netObj.NetworkObjectId, weapon.Damage, pelletDir * (weapon.KnockbackForce * 1.5f), isHeavyHit: true);
-                    }
-                    else if (damageable != null)
-                    {
-                        damageable.TakeDamage(weapon.Damage, pelletDir * weapon.KnockbackForce, isHeavyHit: true);
+                        targetHit = new ShotgunTargetHit
+                        {
+                            NetObj = netObj,
+                            Damageable = damageable,
+                            Hits = 0,
+                            TotalDir = Vector3.zero
+                        };
+                        targetHits[rootTransform] = targetHit;
                     }
 
-                    // Physical push on loose clutter (props, chairs, barrels)
+                    targetHit.Hits++;
+                    targetHit.TotalDir += pelletDir;
+                }
+                else
+                {
                     Rigidbody propRb = hit.collider.GetComponentInParent<Rigidbody>();
                     if (propRb != null)
                     {
-                        propRb.AddForce(pelletDir * (weapon.KnockbackForce * 18f), ForceMode.Impulse);
+                        if (!propImpulses.ContainsKey(propRb))
+                        {
+                            propImpulses[propRb] = Vector3.zero;
+                        }
+                        propImpulses[propRb] += pelletDir;
                     }
                 }
             }
@@ -355,8 +418,51 @@ public class PlayerRangedCombat : NetworkBehaviour
             CreateShotgunTracer(origin + playerCam.transform.forward * 0.4f + playerCam.transform.right * 0.18f - playerCam.transform.up * 0.12f, endPoint);
         }
 
+        // Apply aggregated damage and knockback for ALL pellets that connected with each target
+        foreach (var kvp in targetHits)
+        {
+            ShotgunTargetHit target = kvp.Value;
+            int totalDamage = weapon.Damage * target.Hits;
+            Vector3 avgDir = (target.TotalDir / target.Hits).normalized;
+            Vector3 knockbackImpulse = avgDir * (weapon.KnockbackForce * (1f + 0.12f * (target.Hits - 1)));
+
+            if (target.NetObj != null)
+            {
+                RangedAttackServerRpc(target.NetObj.NetworkObjectId, totalDamage, knockbackImpulse, isHeavyHit: true);
+            }
+            else if (target.Damageable != null)
+            {
+                target.Damageable.TakeDamage(totalDamage, knockbackImpulse, isHeavyHit: true);
+            }
+
+            Rigidbody hitRb = kvp.Key.GetComponentInChildren<Rigidbody>();
+            if (hitRb != null)
+            {
+                hitRb.AddForce(knockbackImpulse * 14f, ForceMode.Impulse);
+            }
+
+            Debug.Log($"[Shotgun] Connected {target.Hits}/{pelletCount} pellets on {kvp.Key.name} for {totalDamage} total damage!");
+        }
+
+        // Push physical props
+        foreach (var kvp in propImpulses)
+        {
+            if (kvp.Key != null)
+            {
+                kvp.Key.AddForce(kvp.Value.normalized * (weapon.KnockbackForce * 16f), ForceMode.Impulse);
+            }
+        }
+
         // Broadcast blast effect to peers
         FireRangedVisualClientRpc(origin + forward * 0.4f, forward, isShotgun: true);
+    }
+
+    private class ShotgunTargetHit
+    {
+        public NetworkObject NetObj;
+        public IDamageable Damageable;
+        public int Hits;
+        public Vector3 TotalDir;
     }
 
     private void CreateShotgunTracer(Vector3 start, Vector3 end)
@@ -374,9 +480,10 @@ public class PlayerRangedCombat : NetworkBehaviour
 
     private void PlayCameraRecoil(float pitchUp)
     {
+        cameraRecoilOffset = Mathf.Min(cameraRecoilOffset + pitchUp, 4.5f);
         if (playerCam != null)
         {
-            playerCam.transform.localRotation *= Quaternion.Euler(-pitchUp, 0f, 0f);
+            playerCam.transform.localRotation = Quaternion.Euler(-cameraRecoilOffset, 0f, 0f);
         }
     }
 
@@ -412,7 +519,16 @@ public class PlayerRangedCombat : NetworkBehaviour
                 return;
             }
 
-            IDamageable damageable = targetNetObj.GetComponentInParent<IDamageable>();
+            IDamageable damageable = targetNetObj.GetComponent<IDamageable>();
+            if (damageable == null)
+            {
+                damageable = targetNetObj.GetComponentInParent<IDamageable>();
+            }
+            if (damageable == null)
+            {
+                damageable = targetNetObj.GetComponentInChildren<IDamageable>();
+            }
+
             if (damageable != null)
             {
                 damageable.TakeDamage(damage, knockbackImpulse, isHeavyHit);

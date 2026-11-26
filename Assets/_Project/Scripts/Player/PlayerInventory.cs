@@ -21,10 +21,12 @@ public class PlayerInventory : NetworkBehaviour
     );
 
     private PlayerAttack playerAttack;
+    private PlayerController playerController;
 
     private void Awake()
     {
         playerAttack = GetComponent<PlayerAttack>();
+        playerController = GetComponent<PlayerController>();
 
         Slots = new NetworkList<InventorySlot>(
             null,
@@ -158,6 +160,11 @@ public class PlayerInventory : NetworkBehaviour
     private void HandleHotbarSelectionInput()
     {
         if (Keyboard.current == null)
+        {
+            return;
+        }
+
+        if (playerController != null && !playerController.CanControl)
         {
             return;
         }
@@ -600,17 +607,204 @@ public class PlayerInventory : NetworkBehaviour
 
         if (!wallet.TrySpendBankedMoney(item.BuyPrice))
         {
-            BuyFeedbackClientRpc($"Not enough money! Need ${item.BuyPrice} in bank.", false);
+            BuyFeedbackClientRpc($"Not enough crew funds! Need ${item.BuyPrice} in company bank.", false);
             return;
         }
 
         AddItem(itemId, 1);
-        BuyFeedbackClientRpc($"Purchased {item.DisplayName} for ${item.BuyPrice}!", true);
+        int remainingFunds = GameManager.Instance != null ? GameManager.Instance.GroupCredits.Value : wallet.BankedMoney.Value;
+        BuyFeedbackClientRpc($"Purchased {item.DisplayName} for ${item.BuyPrice}! Remaining Crew Funds: ${remainingFunds}", true);
     }
 
     [Rpc(SendTo.Owner)]
     private void BuyFeedbackClientRpc(string message, bool success)
     {
         ArmoryShopUI.ShowFeedback(message, success);
+        if (success)
+        {
+            AudioClip clink = ProceduralWeaponAudio.GetCoinClinkClip();
+            if (clink != null)
+            {
+                AudioSource.PlayClipAtPoint(clink, transform.position, 0.9f);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Calculates total dollar value of all monster scrap carried across hotbar slots.
+    /// </summary>
+    public int GetCarriedScrapValue()
+    {
+        if (Slots == null)
+        {
+            return 0;
+        }
+
+        int total = 0;
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            if (Slots[i].IsEmpty)
+            {
+                continue;
+            }
+
+            ItemData item = ItemRegistry.GetItem(Slots[i].itemId.ToString());
+            if (item != null && item.Type == ItemType.Scrap)
+            {
+                total += item.BuyPrice * Slots[i].count;
+            }
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// Calculates total number of scrap items carried across hotbar slots.
+    /// </summary>
+    public int GetCarriedScrapCount()
+    {
+        if (Slots == null)
+        {
+            return 0;
+        }
+
+        int count = 0;
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            if (Slots[i].IsEmpty)
+            {
+                continue;
+            }
+
+            ItemData item = ItemRegistry.GetItem(Slots[i].itemId.ToString());
+            if (item != null && item.Type == ItemType.Scrap)
+            {
+                count += Slots[i].count;
+            }
+        }
+
+        return count;
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void SellItemServerRpc(int slotIndex)
+    {
+        if (!IsServer || Slots == null || slotIndex < 0 || slotIndex >= Slots.Count)
+        {
+            return;
+        }
+
+        InventorySlot slot = Slots[slotIndex];
+        if (slot.IsEmpty)
+        {
+            return;
+        }
+
+        ItemData item = ItemRegistry.GetItem(slot.itemId.ToString());
+        if (item == null)
+        {
+            return;
+        }
+
+        PlayerWallet wallet = GetComponent<PlayerWallet>();
+        if (wallet == null)
+        {
+            return;
+        }
+
+        int payout = 0;
+        if (item.Type == ItemType.Scrap)
+        {
+            payout = item.BuyPrice * slot.count;
+        }
+        else
+        {
+            // 50% salvage resale value for weapons, tools, and consumables
+            payout = Mathf.Max(5, Mathf.RoundToInt(item.BuyPrice * 0.5f * slot.count));
+        }
+
+        Slots[slotIndex] = default;
+        if (GameManager.Instance != null && GameManager.Instance.IsSpawned)
+        {
+            GameManager.Instance.AddCrewCredits(payout, countsTowardsQuota: true);
+        }
+        else
+        {
+            wallet.BankedMoney.Value += payout;
+            wallet.AddQuotaContribution(payout);
+        }
+
+        int totalBank = (GameManager.Instance != null && GameManager.Instance.IsSpawned) ? GameManager.Instance.GroupCredits.Value : wallet.BankedMoney.Value;
+        Debug.Log($"[PlayerInventory] Player {OwnerClientId} sold {slot.count}x {item.DisplayName} for +${payout}. Total Crew Bank: ${totalBank}");
+        SellFeedbackClientRpc($"Salvaged {slot.count}x {item.DisplayName} for +${payout}! Added to Crew Funds.", true);
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void SellAllScrapServerRpc()
+    {
+        if (!IsServer || Slots == null)
+        {
+            return;
+        }
+
+        PlayerWallet wallet = GetComponent<PlayerWallet>();
+        if (wallet == null)
+        {
+            return;
+        }
+
+        int totalPayout = 0;
+        int totalCount = 0;
+
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            if (Slots[i].IsEmpty)
+            {
+                continue;
+            }
+
+            ItemData item = ItemRegistry.GetItem(Slots[i].itemId.ToString());
+            if (item != null && item.Type == ItemType.Scrap)
+            {
+                totalPayout += item.BuyPrice * Slots[i].count;
+                totalCount += Slots[i].count;
+                Slots[i] = default;
+            }
+        }
+
+        if (totalPayout > 0)
+        {
+            if (GameManager.Instance != null && GameManager.Instance.IsSpawned)
+            {
+                GameManager.Instance.AddCrewCredits(totalPayout, countsTowardsQuota: true);
+            }
+            else
+            {
+                wallet.BankedMoney.Value += totalPayout;
+                wallet.AddQuotaContribution(totalPayout);
+            }
+
+            int totalBank = (GameManager.Instance != null && GameManager.Instance.IsSpawned) ? GameManager.Instance.GroupCredits.Value : wallet.BankedMoney.Value;
+            Debug.Log($"[PlayerInventory] Player {OwnerClientId} sold ALL scrap ({totalCount} items) for +${totalPayout}. Total Crew Bank: ${totalBank}");
+            SellFeedbackClientRpc($"Salvaged {totalCount} monster scraps for +${totalPayout}! Added to Crew Funds.", true);
+        }
+        else
+        {
+            SellFeedbackClientRpc("No monster scrap in inventory to salvage!", false);
+        }
+    }
+
+    [Rpc(SendTo.Owner)]
+    private void SellFeedbackClientRpc(string message, bool success)
+    {
+        ArmoryShopUI.ShowFeedback(message, success);
+        if (success)
+        {
+            AudioClip clink = ProceduralWeaponAudio.GetCoinClinkClip();
+            if (clink != null)
+            {
+                AudioSource.PlayClipAtPoint(clink, transform.position, 0.95f);
+            }
+        }
     }
 }

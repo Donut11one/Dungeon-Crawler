@@ -1,0 +1,166 @@
+{
+  "lootTables": [
+    {
+      "enemyId": "basic_abnormality",
+      "displayName": "Containment Abnormality",
+      "minDrops": 1,
+      "maxDrops": 2,
+      "drops": [
+        {
+          "itemId": "abnormality_core",
+          "chance": 0.65,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "salvaged_sensor",
+          "chance": 0.70,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "scrap_metal",
+          "chance": 0.80,
+          "minCount": 1,
+          "maxCount": 2
+        }
+      ]
+    },
+    {
+      "enemyId": "flesh_brute",
+      "displayName": "Flesh Brute",
+      "minDrops": 2,
+      "maxDrops": 3,
+      "drops": [
+        {
+          "itemId": "abnormality_core",
+          "chance": 1.0,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "gold_scrap",
+          "chance": 0.75,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "salvaged_sensor",
+          "chance": 0.60,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "scrap_metal",
+          "chance": 0.85,
+          "minCount": 1,
+          "maxCount": 2
+        }
+      ]
+    },
+    {
+      "enemyId": "shadow_stalker",
+      "displayName": "Shadow Prowler",
+      "minDrops": 1,
+      "maxDrops": 2,
+      "drops": [
+        {
+          "itemId": "salvaged_sensor",
+          "chance": 0.85,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "gold_scrap",
+          "chance": 0.65,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "abnormality_core",
+          "chance": 0.40,
+          "minCount": 1,
+          "maxCount": 1
+        }
+      ]
+    },
+    {
+      "enemyId": "swarm_crawler",
+      "displayName": "Hive Swarmer",
+      "minDrops": 0,
+      "maxDrops": 1,
+      "drops": [
+        {
+          "itemId": "scrap_metal",
+          "chance": 0.75,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "salvaged_sensor",
+          "chance": 0.20,
+          "minCount": 1,
+          "maxCount": 1
+        }
+      ]
+    },
+    {
+      "enemyId": "scrap_scavenger",
+      "displayName": "Scrap Scavenger",
+      "minDrops": 2,
+      "maxDrops": 3,
+      "drops": [
+        {
+          "itemId": "scrap_metal",
+          "chance": 0.90,
+          "minCount": 1,
+          "maxCount": 2
+        },
+        {
+          "itemId": "salvaged_sensor",
+          "chance": 0.65,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "gold_scrap",
+          "chance": 0.50,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "medkit",
+          "chance": 0.20,
+          "minCount": 1,
+          "maxCount": 1
+        }
+      ]
+    },
+    {
+      "enemyId": "default",
+      "displayName": "Default Monster Table",
+      "minDrops": 1,
+      "maxDrops": 2,
+      "drops": [
+        {
+          "itemId": "scrap_metal",
+          "chance": 0.80,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "salvaged_sensor",
+          "chance": 0.50,
+          "minCount": 1,
+          "maxCount": 1
+        },
+        {
+          "itemId": "abnormality_core",
+          "chance": 0.35,
+          "minCount": 1,
+          "maxCount": 1
+        }
+      ]
+    }
+  ]
+}

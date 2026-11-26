@@ -1359,7 +1359,11 @@ public class ModelImporterWizard : EditorWindow
             return;
         }
 
-        NetworkPrefabsList list = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>("Assets/DefaultNetworkPrefabs.asset");
+        NetworkPrefabsList list = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>("Assets/_Project/Resources/DefaultNetworkPrefabs.asset");
+        if (list == null)
+        {
+            list = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>("Assets/DefaultNetworkPrefabs.asset");
+        }
         if (list != null)
         {
             if (!list.Contains(prefab))

@@ -36,6 +36,48 @@ public class GameManager : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    [Header("Crew Economy (Lethal Company Shared Funds & Quota)")]
+    [SerializeField] private int startingCrewCredits = 150;
+    [SerializeField] private int baseQuotaTarget = 250;
+    [SerializeField] private int quotaIncrement = 125;
+    [SerializeField] private int totalDaysPerCycle = 3;
+
+    public NetworkVariable<int> GroupCredits = new NetworkVariable<int>(
+        150,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<int> QuotaProgress = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<int> QuotaTarget = new NetworkVariable<int>(
+        250,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<int> QuotaLevel = new NetworkVariable<int>(
+        1,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<int> QuotaPoints = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    public NetworkVariable<int> DaysRemaining = new NetworkVariable<int>(
+        3,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public enum GameState
     {
         Lobby,
@@ -66,6 +108,28 @@ public class GameManager : NetworkBehaviour
         if (GetComponent<LobbyArea>() == null && FindAnyObjectByType<LobbyArea>() == null)
         {
             gameObject.AddComponent<LobbyArea>();
+        }
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+
+        if (IsServer)
+        {
+            if (GroupCredits.Value <= 0)
+            {
+                GroupCredits.Value = startingCrewCredits;
+            }
+            if (QuotaTarget.Value <= 0)
+            {
+                QuotaTarget.Value = baseQuotaTarget;
+            }
+            if (DaysRemaining.Value <= 0)
+            {
+                DaysRemaining.Value = totalDaysPerCycle;
+            }
+            SyncPlayerWallets();
         }
     }
 
@@ -281,6 +345,17 @@ public class GameManager : NetworkBehaviour
         extractedPlayers.Clear();
         Physics.SyncTransforms();
 
+        // Lethal Company deadline countdown: each dive advances the contract day
+        if (DaysRemaining.Value <= 0)
+        {
+            HandleDeadlineFailure();
+        }
+        else
+        {
+            DaysRemaining.Value--;
+        }
+        SyncPlayerWallets();
+
         // Transition to Playing state
         CurrentState.Value = GameState.Playing;
 
@@ -322,7 +397,7 @@ public class GameManager : NetworkBehaviour
                 if (wallet != null)
                 {
                     bankedAmount = wallet.BankRunMoney(bonusAmount);
-                    totalBank = wallet.BankedMoney.Value;
+                    totalBank = GroupCredits.Value;
                 }
 
                 PlayerController pc = client.PlayerObject.GetComponent<PlayerController>();
@@ -461,6 +536,8 @@ public class GameManager : NetworkBehaviour
 
         extractedPlayers.Clear();
         Physics.SyncTransforms();
+
+        SyncPlayerWallets();
 
         CurrentState.Value = GameState.Lobby;
 
@@ -603,5 +680,174 @@ public class GameManager : NetworkBehaviour
     private void OnAllExtractedClientRpc()
     {
         Debug.Log("[GameManager] ALL PLAYERS ESCAPED! Round Won!");
+    }
+
+    /// <summary>
+    /// Server: Adds money to the shared crew bank.
+    /// If countsTowardsQuota is true, also contributes towards the combined profit quota.
+    /// </summary>
+    public void AddCrewCredits(int amount, bool countsTowardsQuota = true)
+    {
+        if (!IsServer || amount <= 0)
+        {
+            return;
+        }
+
+        GroupCredits.Value += amount;
+        Debug.Log($"[CrewEconomy] +${amount} added to Company Funds. New Total: ${GroupCredits.Value}");
+
+        if (countsTowardsQuota)
+        {
+            AddQuotaContribution(amount);
+        }
+
+        SyncPlayerWallets();
+    }
+
+    /// <summary>
+    /// Server: Attempts to spend from the shared crew bank.
+    /// Deducts from the shared pool so every player's balance decreases.
+    /// </summary>
+    public bool TrySpendCrewCredits(int amount)
+    {
+        if (!IsServer || amount <= 0)
+        {
+            return false;
+        }
+
+        if (GroupCredits.Value >= amount)
+        {
+            GroupCredits.Value -= amount;
+            Debug.Log($"[CrewEconomy] -${amount} spent from Company Funds. Remaining: ${GroupCredits.Value}");
+            SyncPlayerWallets();
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Server: Contributes towards the crew's combined profit quota.
+    /// If target met or exceeded: advances tier, resets deadline, carries over surplus, and triggers celebration.
+    /// </summary>
+    public void AddQuotaContribution(int amount)
+    {
+        if (!IsServer || amount <= 0)
+        {
+            return;
+        }
+
+        QuotaProgress.Value += amount;
+        int pointsEarned = 0;
+
+        while (QuotaTarget.Value > 0 && QuotaProgress.Value >= QuotaTarget.Value)
+        {
+            QuotaProgress.Value -= QuotaTarget.Value;
+            QuotaPoints.Value++;
+            QuotaLevel.Value++;
+            pointsEarned++;
+
+            QuotaTarget.Value = CalculateQuotaTarget(QuotaLevel.Value);
+            DaysRemaining.Value = totalDaysPerCycle;
+
+            Debug.Log($"[CrewEconomy] CREW MET QUOTA! Earned +1 Point (Total: {QuotaPoints.Value}). Next Quota Target: ${QuotaTarget.Value} (Tier {QuotaLevel.Value}, {DaysRemaining.Value} Days)");
+        }
+
+        if (pointsEarned > 0)
+        {
+            QuotaFulfilledClientRpc(pointsEarned, QuotaPoints.Value, QuotaTarget.Value, DaysRemaining.Value);
+        }
+
+        SyncPlayerWallets();
+    }
+
+    public int CalculateQuotaTarget(int level)
+    {
+        int target = baseQuotaTarget + Mathf.Max(0, level - 1) * quotaIncrement;
+        return Mathf.Max(50, target);
+    }
+
+    /// <summary>
+    /// Server: Disciplinary penalty when the deadline expires without meeting the profit quota.
+    /// </summary>
+    private void HandleDeadlineFailure()
+    {
+        int penalty = Mathf.RoundToInt(GroupCredits.Value * 0.25f);
+        GroupCredits.Value = Mathf.Max(50, GroupCredits.Value - penalty);
+        QuotaProgress.Value = 0;
+        QuotaLevel.Value = 1;
+        QuotaTarget.Value = baseQuotaTarget;
+        DaysRemaining.Value = totalDaysPerCycle;
+
+        Debug.Log($"[CrewEconomy] QUOTA DEADLINE EXPIRED! Docked ${penalty}. Reset to Tier 1 Quota (${baseQuotaTarget}), {DaysRemaining.Value} Days.");
+        QuotaDeadlineFailedClientRpc(penalty, GroupCredits.Value, QuotaTarget.Value);
+        SyncPlayerWallets();
+    }
+
+    /// <summary>
+    /// Server: Resets crew economy to initial state if needed.
+    /// </summary>
+    public void ResetCrewEconomy()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        GroupCredits.Value = startingCrewCredits;
+        QuotaProgress.Value = 0;
+        QuotaPoints.Value = 0;
+        QuotaLevel.Value = 1;
+        QuotaTarget.Value = baseQuotaTarget;
+        DaysRemaining.Value = totalDaysPerCycle;
+        SyncPlayerWallets();
+    }
+
+    /// <summary>
+    /// Server: Synchronizes all connected player wallets with the shared crew economy.
+    /// </summary>
+    public void SyncPlayerWallets()
+    {
+        if (!IsServer || NetworkManager.Singleton == null)
+        {
+            return;
+        }
+
+        foreach (NetworkClient client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (client.PlayerObject == null)
+            {
+                continue;
+            }
+
+            PlayerWallet wallet = client.PlayerObject.GetComponent<PlayerWallet>();
+            if (wallet != null)
+            {
+                wallet.BankedMoney.Value = GroupCredits.Value;
+                wallet.QuotaProgress.Value = QuotaProgress.Value;
+                wallet.QuotaTarget.Value = QuotaTarget.Value;
+                wallet.QuotaLevel.Value = QuotaLevel.Value;
+                wallet.QuotaPoints.Value = QuotaPoints.Value;
+            }
+        }
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void QuotaFulfilledClientRpc(int pointsAdded, int totalPoints, int nextTarget, int days)
+    {
+        GameHUD.TriggerCrewQuotaCelebration(pointsAdded, totalPoints, nextTarget, days);
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void QuotaDeadlineFailedClientRpc(int penaltyDeducted, int remainingCredits, int nextTarget)
+    {
+        GameHUD.TriggerQuotaDeadlineFailed(penaltyDeducted, remainingCredits, nextTarget);
+    }
+
+    [Rpc(SendTo.NotOwner)]
+    public void NotifyHostShutdownClientRpc(string reason)
+    {
+        Debug.Log($"[GameManager] Host is ending the session: {reason}");
+        InGameMenuUI.BootBackToMenu(reason);
     }
 }

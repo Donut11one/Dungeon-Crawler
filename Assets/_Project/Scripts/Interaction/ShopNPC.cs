@@ -13,7 +13,7 @@ public class ShopNPC : MonoBehaviour
     [SerializeField] private float interactionDistance = 5.2f;
     [SerializeField] private float autoCloseDistance = 7.5f;
     [SerializeField] private string npcName = "Quartermaster Knox";
-    [SerializeField] private string npcTitle = "< Weapons & Munitions >";
+    [SerializeField] private string npcTitle = "< Weapons & Salvage Buyback >";
 
     private Texture2D promptTexture;
 

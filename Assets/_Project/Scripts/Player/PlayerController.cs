@@ -275,6 +275,16 @@ public class PlayerController : NetworkBehaviour
                 return false;
             }
 
+            if (InGameMenuUI.Instance != null && InGameMenuUI.Instance.IsOpen)
+            {
+                return false;
+            }
+
+            if (ArmoryShopUI.Instance != null && ArmoryShopUI.Instance.IsOpen)
+            {
+                return false;
+            }
+
             if (GameManager.Instance != null)
             {
                 if (GameManager.Instance.CurrentState.Value == GameManager.GameState.RoundOver)
@@ -300,6 +310,10 @@ public class PlayerController : NetworkBehaviour
 
     private bool CanLockCursor()
     {
+        if (InGameMenuUI.Instance != null && InGameMenuUI.Instance.IsOpen)
+        {
+            return false;
+        }
         if (ArmoryShopUI.Instance != null && ArmoryShopUI.Instance.IsOpen)
         {
             return false;
@@ -679,6 +693,11 @@ public class PlayerController : NetworkBehaviour
         if (cameraHolder != null)
         {
             cameraHolder.localRotation = Quaternion.identity;
+        }
+
+        if (playerCamera != null)
+        {
+            playerCamera.transform.localRotation = Quaternion.identity;
         }
 
         Quaternion uprightRotation = Quaternion.Euler(0f, currentYaw, 0f);

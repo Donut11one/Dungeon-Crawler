@@ -1,8 +1,9 @@
+using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
 /// High-velocity physical pneumatic nail projectile.
-/// Flew from the Pneumatic Nailgun.
+/// Fired from the Pneumatic Nailgun.
 /// Travels ballistically; damages enemies or physically embeds into walls and props on impact.
 /// </summary>
 public class NailProjectile : MonoBehaviour
@@ -15,19 +16,21 @@ public class NailProjectile : MonoBehaviour
     private Vector3 velocity;
     private int damage;
     private float knockback;
-    private ulong shooterClientId;
+    private Transform shooterTransform;
+    private PlayerRangedCombat combatOwner;
     private bool isEmbedded;
     private float lifetimeTimer;
     private GameObject visualMesh;
     private TrailRenderer trail;
 
-    public void Initialize(Vector3 direction, int dmg, float kb, ulong shooterId)
+    public void Initialize(Vector3 direction, int dmg, float kb, Transform shooter, PlayerRangedCombat combat)
     {
         velocity = direction.normalized * speed;
         damage = dmg;
         knockback = kb;
-        shooterClientId = shooterId;
-        transform.forward = direction;
+        shooterTransform = shooter;
+        combatOwner = combat;
+        transform.forward = direction.normalized;
 
         SetupVisuals();
     }
@@ -108,13 +111,22 @@ public class NailProjectile : MonoBehaviour
         Vector3 moveStep = velocity.normalized * stepDist;
         Ray ray = new Ray(transform.position, velocity.normalized);
 
-        if (Physics.Raycast(ray, out RaycastHit hit, stepDist, ~0, QueryTriggerInteraction.Ignore))
+        // Primary raycast along trajectory
+        RaycastHit hit;
+        bool hasHit = Physics.Raycast(ray, out hit, stepDist, ~0, QueryTriggerInteraction.Ignore);
+
+        // Fallback SphereCast (radius 0.14f) ensures high-velocity nails reliably catch moving enemies and limbs
+        if (!hasHit)
         {
-            // Ignore collision with shooter
-            if (hit.collider != null && hit.collider.transform.root != null)
+            hasHit = Physics.SphereCast(ray, 0.14f, out hit, stepDist, ~0, QueryTriggerInteraction.Ignore);
+        }
+
+        if (hasHit)
+        {
+            // Ignore collision with the shooter's own body, arms, or viewmodel
+            if (shooterTransform != null && hit.collider != null)
             {
-                var shooterNet = hit.collider.GetComponentInParent<Unity.Netcode.NetworkObject>();
-                if (shooterNet != null && shooterNet.OwnerClientId == shooterClientId)
+                if (hit.collider.transform.IsChildOf(shooterTransform) || hit.collider.transform.root == shooterTransform.root)
                 {
                     transform.position += moveStep;
                     return;
@@ -140,15 +152,29 @@ public class NailProjectile : MonoBehaviour
 
         // 1. Check if hit entity is damageable or a network object
         IDamageable damageable = hit.collider.GetComponentInParent<IDamageable>();
-        Unity.Netcode.NetworkObject netObj = hit.collider.GetComponentInParent<Unity.Netcode.NetworkObject>();
+        if (damageable == null)
+        {
+            damageable = hit.collider.GetComponentInChildren<IDamageable>();
+        }
+
+        NetworkObject netObj = hit.collider.GetComponentInParent<NetworkObject>();
 
         if (netObj != null || damageable != null)
         {
-            // Position nail at impact
+            // Position nail at impact point and stick to the hit body part / limb
             transform.position = hit.point;
+            transform.forward = velocity.normalized;
+            if (hit.collider != null)
+            {
+                transform.parent = hit.collider.transform; // Moves with enemy's animated bone!
+            }
 
-            // Apply damage via server-side or RPC hook
-            if (damageable != null)
+            // Apply server-authoritative damage via PlayerRangedCombat ServerRpc
+            if (combatOwner != null && netObj != null)
+            {
+                combatOwner.RangedAttackServerRpc(netObj.NetworkObjectId, damage, velocity.normalized * knockback, isHeavyHit: false);
+            }
+            else if (damageable != null)
             {
                 damageable.TakeDamage(damage, velocity.normalized * knockback, isHeavyHit: false);
             }
@@ -160,14 +186,20 @@ public class NailProjectile : MonoBehaviour
             }
 
             SpawnImpactSparks(hit.point, hit.normal, new Color(1f, 0.35f, 0.1f));
-            Destroy(gameObject, 0.15f);
+            PlayThwackSound(hit.point);
+
+            // Nail remains stuck in the enemy for 8 seconds before disappearing
+            Destroy(gameObject, 8f);
             return;
         }
 
         // 2. Environment hit: Embed firmly into wall / door / floor / physical prop
         transform.position = hit.point + velocity.normalized * embedDepth;
         transform.forward = velocity.normalized;
-        transform.parent = hit.transform; // Move with hit prop or door!
+        if (hit.collider != null)
+        {
+            transform.parent = hit.transform; // Move with hit prop or door!
+        }
 
         Rigidbody propRb = hit.collider.GetComponentInParent<Rigidbody>();
         if (propRb != null)
@@ -186,8 +218,9 @@ public class NailProjectile : MonoBehaviour
 
     private void SpawnImpactSparks(Vector3 pos, Vector3 normal, Color sparkColor)
     {
+        Vector3 n = normal.sqrMagnitude > 0.001f ? normal : -velocity.normalized;
         GameObject spark = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        spark.transform.position = pos + normal * 0.05f;
+        spark.transform.position = pos + n * 0.05f;
         spark.transform.localScale = Vector3.one * 0.08f;
 
         Collider c = spark.GetComponent<Collider>();

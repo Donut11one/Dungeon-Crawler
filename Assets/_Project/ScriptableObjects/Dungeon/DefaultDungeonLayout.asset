@@ -17,15 +17,21 @@ MonoBehaviour:
   defaultWallThickness: 0.3
   defaultDoorWidth: 3.2
   rooms:
-  - roomId: CustomBlankRoom_818
-    roomLabel: CustomBlankRoom_818
-    position: {x: 0, y: -0.0000000805594, z: 58}
-    rotation: {x: -0, y: 0, z: 0}
-    dimensions: {x: 30, y: 4, z: 30}
+  - roomId: ConnectingCorridor_443
+    roomLabel: ConnectingCorridor_443
+    position: {x: 0, y: 0.00000005401813, z: 22}
+    rotation: {x: 0, y: 180, z: 0}
+    dimensions: {x: 4, y: 4, z: 14}
     floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
     wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
     ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
     doorways:
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
     - side: 1
       width: 3.2
       offset: 0
@@ -36,15 +42,7 @@ MonoBehaviour:
     doors: []
     props: []
     coinSpawns: []
-    enemySpawns:
-    - localPosition: {x: -8, y: 0.1, z: 5}
-      enemyId: flesh_brute
-    - localPosition: {x: -4.73305, y: 0.1, z: -5.4384727}
-      enemyId: swarm_crawler
-    - localPosition: {x: -3, y: 0.1, z: -3}
-      enemyId: scrap_scavenger
-    - localPosition: {x: 4, y: 0.1, z: -4}
-      enemyId: scrap_scavenger
+    enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
     extractionLocalPosition: {x: 0, y: 0, z: 0}
@@ -106,6 +104,141 @@ MonoBehaviour:
     playerSpawns: []
     hasExtractionPoint: 0
     extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: CustomBlankRoom_818
+    roomLabel: CustomBlankRoom_818
+    position: {x: 0, y: -0.0000000805594, z: 58}
+    rotation: {x: -0, y: 0, z: 0}
+    dimensions: {x: 30, y: 4, z: 30}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 1
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    props: []
+    coinSpawns: []
+    enemySpawns:
+    - localPosition: {x: -8, y: 0.1, z: 5}
+      enemyId: flesh_brute
+    - localPosition: {x: 4, y: 0.1, z: -4}
+      enemyId: scrap_scavenger
+    - localPosition: {x: -3, y: 0.1, z: -3}
+      enemyId: scrap_scavenger
+    - localPosition: {x: -4.73305, y: 0.1, z: -5.4384727}
+      enemyId: swarm_crawler
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: ExtractionChamber_928
+    roomLabel: ExtractionChamber_928
+    position: {x: 10, y: -0.0000007575168, z: 36}
+    rotation: {x: 0, y: 270, z: 0}
+    dimensions: {x: 10, y: 4, z: 12}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 3
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    props: []
+    coinSpawns: []
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 1
+    extractionLocalPosition: {x: 0, y: 0.05, z: 0}
+  - roomId: CoopPuzzleVault_893
+    roomLabel: CoopPuzzleVault_893
+    position: {x: 0, y: -0.00000014932746, z: 10}
+    rotation: {x: -0, y: 0, z: 0}
+    dimensions: {x: 12, y: 4, z: 10}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 1
+      doorChannel: Vault_63
+      doorStartsOpen: 0
+    - side: 1
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers:
+    - leverName: LeverPrefab_CoopPuzzleVault_893_Lever_1
+      localPosition: {x: 5.85, y: 1.4000001, z: 0}
+      localEulerAngles: {x: -0, y: 270, z: -0}
+      mechanismChannel: Vault_63
+      resetDelay: 0
+    - leverName: LeverPrefab_CoopPuzzleVault_893_Lever_0
+      localPosition: {x: -5.85, y: 1.4000001, z: 0}
+      localEulerAngles: {x: -0, y: 90, z: 0}
+      mechanismChannel: Vault_63
+      resetDelay: 0
+    doors:
+    - doorName: Security Blast Door
+      localPosition: {x: 0, y: 0.00000014932746, z: 5}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      mechanismChannel: Vault_63
+      startsOpen: 0
+    props: []
+    coinSpawns: []
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: CrossroadsJunction_104
+    roomLabel: CrossroadsJunction_104
+    position: {x: 10, y: 0.0000004559256, z: 25}
+    rotation: {x: -0, y: 0, z: 0}
+    dimensions: {x: 12, y: 4, z: 12}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 1
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 2
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    props: []
+    coinSpawns: []
+    enemySpawns:
+    - localPosition: {x: 2, y: 0.1, z: -4}
+      enemyId: scrap_scavenger
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
   - roomId: StorageDepot_755
     roomLabel: StorageDepot_755
     position: {x: 22, y: -6.880896e-10, z: 25}
@@ -144,50 +277,6 @@ MonoBehaviour:
       localEulerAngles: {x: -0, y: 0, z: 0}
       localScale: {x: 0.8, y: 4, z: 0.8}
       color: {r: 0.3499999, g: 0.31999987, b: 0.29999992, a: 1}
-    coinSpawns: []
-    enemySpawns: []
-    playerSpawns: []
-    hasExtractionPoint: 0
-    extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: CoopPuzzleVault_893
-    roomLabel: CoopPuzzleVault_893
-    position: {x: 0, y: -0.00000014932746, z: 10}
-    rotation: {x: -0, y: 0, z: 0}
-    dimensions: {x: 12, y: 4, z: 10}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 0
-      width: 3.2
-      offset: 0
-      hasDoor: 1
-      doorChannel: Vault_63
-      doorStartsOpen: 0
-    - side: 1
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers:
-    - leverName: LeverPrefab_CoopPuzzleVault_893_Lever_0
-      localPosition: {x: -5.85, y: 1.4000001, z: 0}
-      localEulerAngles: {x: -0, y: 90, z: 0}
-      mechanismChannel: Vault_63
-      resetDelay: 0
-    - leverName: LeverPrefab_CoopPuzzleVault_893_Lever_1
-      localPosition: {x: 5.85, y: 1.4000001, z: 0}
-      localEulerAngles: {x: -0, y: 270, z: -0}
-      mechanismChannel: Vault_63
-      resetDelay: 0
-    doors:
-    - doorName: Security Blast Door
-      localPosition: {x: 0, y: 0.00000014932746, z: 5}
-      localEulerAngles: {x: -0, y: 0, z: 0}
-      mechanismChannel: Vault_63
-      startsOpen: 0
-    props: []
     coinSpawns: []
     enemySpawns: []
     playerSpawns: []
@@ -251,94 +340,3 @@ MonoBehaviour:
     playerSpawns: []
     hasExtractionPoint: 0
     extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: ConnectingCorridor_443
-    roomLabel: ConnectingCorridor_443
-    position: {x: 0, y: 0.00000005401813, z: 22}
-    rotation: {x: 0, y: 180, z: 0}
-    dimensions: {x: 4, y: 4, z: 14}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 0
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    - side: 1
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers: []
-    doors: []
-    props: []
-    coinSpawns: []
-    enemySpawns: []
-    playerSpawns: []
-    hasExtractionPoint: 0
-    extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: CrossroadsJunction_104
-    roomLabel: CrossroadsJunction_104
-    position: {x: 10, y: 0.0000004559256, z: 25}
-    rotation: {x: -0, y: 0, z: 0}
-    dimensions: {x: 12, y: 4, z: 12}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 0
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    - side: 1
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    - side: 2
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers: []
-    doors: []
-    props: []
-    coinSpawns: []
-    enemySpawns:
-    - localPosition: {x: -1, y: 0.1, z: 3}
-      enemyId: flesh_brute
-    - localPosition: {x: 2, y: 0.1, z: -4}
-      enemyId: scrap_scavenger
-    playerSpawns: []
-    hasExtractionPoint: 0
-    extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: ExtractionChamber_928
-    roomLabel: ExtractionChamber_928
-    position: {x: 10, y: -0.0000007575168, z: 36}
-    rotation: {x: 0, y: 270, z: 0}
-    dimensions: {x: 10, y: 4, z: 12}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 3
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers: []
-    doors: []
-    props: []
-    coinSpawns: []
-    enemySpawns: []
-    playerSpawns: []
-    hasExtractionPoint: 1
-    extractionLocalPosition: {x: 0, y: 0.05, z: 0}
