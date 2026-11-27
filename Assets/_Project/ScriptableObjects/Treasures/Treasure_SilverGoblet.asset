@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed13830a036c4e14e83cf5b8030550fc, type: 3}
+  m_Name: Treasure_SilverGoblet
+  m_EditorClassIdentifier: Assembly-CSharp::TreasureData
+  treasureId: silver_goblet
+  displayName: Silver Goblet
+  description: A polished goblet still holding something dark red.
+  rarity: 1
+  value: 30
+  visualPrefab: {fileID: 605747557857133387, guid: d0676e250ac11d9488112c1dd7c19933, type: 3}
+  visualScale: 1
+  hoverHeight: 0.1
+  spinSpeed: 55
+  bobHeight: 0.04
+  bobSpeed: 2
+  useCustomAccentColor: 0
+  customAccentColor: {r: 1, g: 1, b: 1, a: 1}
+  pickupSound: {fileID: 0}
+  pickupVolume: 0.8
