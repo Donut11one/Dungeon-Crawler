@@ -121,6 +121,29 @@ public class PropPlacementData
 }
 
 [System.Serializable]
+public class LightFixturePlacementData
+{
+    public string fixtureName = "CeilingLight";
+    public Vector3 localPosition = Vector3.zero;
+    public Vector3 localEulerAngles = Vector3.zero;
+    public FacilityLightType lightType = FacilityLightType.FluorescentCeiling;
+    public LightFlickerMode flickerMode = LightFlickerMode.Steady;
+
+    public LightFixturePlacementData()
+    {
+    }
+
+    public LightFixturePlacementData(string name, Vector3 pos, Vector3 rot, FacilityLightType type, LightFlickerMode flicker)
+    {
+        fixtureName = name;
+        localPosition = pos;
+        localEulerAngles = rot;
+        lightType = type;
+        flickerMode = flicker;
+    }
+}
+
+[System.Serializable]
 public class RoomLayoutData
 {
     public string roomId = "Room";
@@ -137,6 +160,7 @@ public class RoomLayoutData
     public List<LeverPlacementData> levers = new List<LeverPlacementData>();
     public List<DoorPlacementData> doors = new List<DoorPlacementData>();
     public List<PropPlacementData> props = new List<PropPlacementData>();
+    public List<LightFixturePlacementData> lights = new List<LightFixturePlacementData>();
     public List<Vector3> coinSpawns = new List<Vector3>();
     public List<EnemyPlacementData> enemySpawns = new List<EnemyPlacementData>();
     public List<Vector3> playerSpawns = new List<Vector3>();

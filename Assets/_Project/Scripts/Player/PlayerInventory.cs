@@ -20,13 +20,30 @@ public class PlayerInventory : NetworkBehaviour
         NetworkVariableWritePermission.Owner
     );
 
+    public NetworkVariable<bool> FlashlightActive = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     private PlayerAttack playerAttack;
     private PlayerController playerController;
+    private FirstPersonViewmodel viewmodel;
+    private Camera ownerCamera;
+    private Light flashlightLight;
+    private Light flashlightSoftFill;
+    private GameObject thirdPersonFlashlight;
+    private Light thirdPersonFlashlightSpot;
+    private Light thirdPersonFlashlightGlow;
+    private Material thirdPersonFlashlightLensMat;
+    private readonly RaycastHit[] flashlightWallHits = new RaycastHit[8];
 
     private void Awake()
     {
         playerAttack = GetComponent<PlayerAttack>();
         playerController = GetComponent<PlayerController>();
+        viewmodel = GetComponent<FirstPersonViewmodel>();
+        ownerCamera = GetComponentInChildren<Camera>(true);
 
         Slots = new NetworkList<InventorySlot>(
             null,
@@ -43,6 +60,8 @@ public class PlayerInventory : NetworkBehaviour
         ItemRegistry.Initialize();
 
         SelectedSlotIndex.OnValueChanged += OnSelectedSlotChanged;
+        FlashlightActive.OnValueChanged += OnFlashlightActiveChanged;
+        Slots.OnListChanged += OnSlotsListChanged;
 
         if (IsServer)
         {
@@ -54,23 +73,51 @@ public class PlayerInventory : NetworkBehaviour
                     Slots.Add(new InventorySlot());
                 }
             }
+
+            // Contractor starter gear: Tactical Flashlight in hotbar
+            if (IsEmpty())
+            {
+                AddItem("flashlight", 1);
+            }
         }
 
         UpdateThirdPersonWeaponVisual(SelectedSlotIndex.Value);
+        RefreshFlashlightState();
     }
 
     public override void OnNetworkDespawn()
     {
         SelectedSlotIndex.OnValueChanged -= OnSelectedSlotChanged;
+        FlashlightActive.OnValueChanged -= OnFlashlightActiveChanged;
+        Slots.OnListChanged -= OnSlotsListChanged;
+    }
+
+    private void OnSlotsListChanged(NetworkListEvent<InventorySlot> changeEvent)
+    {
+        UpdateThirdPersonWeaponVisual(SelectedSlotIndex.Value);
+        RefreshFlashlightState();
     }
 
     private void OnSelectedSlotChanged(int previous, int current)
     {
         UpdateThirdPersonWeaponVisual(current);
+        RefreshFlashlightState();
     }
 
     private void UpdateThirdPersonWeaponVisual(int slotIndex)
     {
+        // Local owner uses FirstPersonViewmodel; never attach blocking third-person cubes into owner's body/camera
+        if (IsOwner)
+        {
+            if (currentThirdPersonVisual != null)
+            {
+                Destroy(currentThirdPersonVisual);
+                currentThirdPersonVisual = null;
+            }
+            thirdPersonFlashlightLensMat = null;
+            return;
+        }
+
         if (thirdPersonHolder == null)
         {
             Transform handR = FindHandBone(transform);
@@ -80,6 +127,17 @@ public class PlayerInventory : NetworkBehaviour
                 holder.transform.parent = handR;
                 holder.transform.localPosition = new Vector3(0.04f, 0.08f, 0.05f);
                 holder.transform.localRotation = Quaternion.Euler(70f, 0f, 0f);
+                thirdPersonHolder = holder.transform;
+            }
+            else
+            {
+                Transform camHolder = transform.Find("CameraHolder") ?? transform;
+                GameObject holder = new GameObject("ThirdPersonWeaponHolder");
+                holder.transform.SetParent(camHolder, false);
+                holder.transform.localPosition = camHolder == transform
+                    ? new Vector3(0.28f, 1.05f, 0.34f)
+                    : new Vector3(0.28f, -0.15f, 0.34f);
+                holder.transform.localRotation = Quaternion.identity;
                 thirdPersonHolder = holder.transform;
             }
         }
@@ -94,6 +152,7 @@ public class PlayerInventory : NetworkBehaviour
             Destroy(currentThirdPersonVisual);
             currentThirdPersonVisual = null;
         }
+        thirdPersonFlashlightLensMat = null;
 
         ItemData active = GetSelectedItem();
         if (active == null)
@@ -105,6 +164,12 @@ public class PlayerInventory : NetworkBehaviour
         currentThirdPersonVisual.transform.parent = thirdPersonHolder;
         currentThirdPersonVisual.transform.localPosition = Vector3.zero;
         currentThirdPersonVisual.transform.localRotation = Quaternion.identity;
+
+        if (active.ItemId == "flashlight")
+        {
+            BuildThirdPersonFlashlightVisual(currentThirdPersonVisual.transform);
+            return;
+        }
 
         // Create compact third-person item mesh
         GameObject prop = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -125,12 +190,77 @@ public class PlayerInventory : NetworkBehaviour
         if (rend != null)
         {
             rend.material = MaterialHelper.CreateLitMaterial(rend, active.SlotColor);
+            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+    }
+
+    private void BuildThirdPersonFlashlightVisual(Transform parent)
+    {
+        CreateThirdPersonPart(parent, "TP_Handle", new Vector3(0f, 0f, 0.08f), new Vector3(0.05f, 0.05f, 0.22f), new Color(0.18f, 0.20f, 0.22f));
+        CreateThirdPersonPart(parent, "TP_Bezel", new Vector3(0f, 0f, 0.20f), new Vector3(0.085f, 0.085f, 0.07f), new Color(0.95f, 0.85f, 0.20f));
+
+        GameObject lens = CreateThirdPersonPart(parent, "TP_Lens", new Vector3(0f, 0f, 0.238f), new Vector3(0.068f, 0.068f, 0.01f), new Color(0.35f, 0.35f, 0.32f));
+        Renderer lensRend = lens.GetComponent<Renderer>();
+        if (lensRend != null)
+        {
+            thirdPersonFlashlightLensMat = lensRend.material;
+            UpdateThirdPersonLensEmission(IsFlashlightShining);
+        }
+    }
+
+    private GameObject CreateThirdPersonPart(Transform parent, string partName, Vector3 localPos, Vector3 localScale, Color color)
+    {
+        GameObject part = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        part.name = partName;
+        part.transform.SetParent(parent, false);
+        part.transform.localPosition = localPos;
+        part.transform.localScale = localScale;
+        part.transform.localRotation = Quaternion.identity;
+
+        Collider col = part.GetComponent<Collider>();
+        if (col != null)
+        {
+            Destroy(col);
+        }
+
+        Renderer rend = part.GetComponent<Renderer>();
+        if (rend != null)
+        {
+            rend.material = MaterialHelper.CreateLitMaterial(rend, color);
+            // Held third-person meshes must never cast shadows into the remote flashlight spotlight
+            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        return part;
+    }
+
+    private void UpdateThirdPersonLensEmission(bool shining)
+    {
+        if (thirdPersonFlashlightLensMat == null)
+        {
+            return;
+        }
+
+        if (shining)
+        {
+            Color bright = new Color(1f, 0.96f, 0.85f);
+            thirdPersonFlashlightLensMat.color = bright;
+            thirdPersonFlashlightLensMat.EnableKeyword("_EMISSION");
+            thirdPersonFlashlightLensMat.SetColor("_EmissionColor", bright * 4.0f);
+        }
+        else
+        {
+            thirdPersonFlashlightLensMat.color = new Color(0.35f, 0.35f, 0.32f);
+            thirdPersonFlashlightLensMat.DisableKeyword("_EMISSION");
+            thirdPersonFlashlightLensMat.SetColor("_EmissionColor", Color.black);
         }
     }
 
     private Transform FindHandBone(Transform current)
     {
-        if (current.name == "Hand.R" || current.name == "Wrist.R")
+        string lower = current.name.ToLowerInvariant();
+        if (lower == "hand.r" || lower == "wrist.r" || lower == "righthand" ||
+            lower == "hand_r" || lower == "r_hand" || lower.EndsWith(":righthand") || lower.EndsWith("_righthand"))
         {
             return current;
         }
@@ -155,6 +285,24 @@ public class PlayerInventory : NetworkBehaviour
         }
 
         HandleHotbarSelectionInput();
+    }
+
+    private void LateUpdate()
+    {
+        if (IsOwner)
+        {
+            if (flashlightLight != null && flashlightLight.enabled)
+            {
+                UpdateLocalFlashlightPose();
+            }
+        }
+        else
+        {
+            if (thirdPersonFlashlight != null && thirdPersonFlashlight.activeSelf)
+            {
+                UpdateRemoteFlashlightPose();
+            }
+        }
     }
 
     private void HandleHotbarSelectionInput()
@@ -201,6 +349,12 @@ public class PlayerInventory : NetworkBehaviour
         {
             DropSelectedItemServerRpc();
         }
+
+        // Toggle Tactical Flashlight key [F]
+        if (Keyboard.current.fKey.wasPressedThisFrame)
+        {
+            ToggleFlashlight();
+        }
     }
 
     public void SelectSlot(int index)
@@ -229,6 +383,16 @@ public class PlayerInventory : NetworkBehaviour
             if (playerAttack != null)
             {
                 playerAttack.OnItemSwapped();
+            }
+
+            // Immediately extinguish flashlight when swapping away from the flashlight slot
+            if (!IsHoldingFlashlight())
+            {
+                ApplyFlashlightVisuals(false);
+                if (FlashlightActive.Value)
+                {
+                    SetFlashlightActiveServerRpc(false, index);
+                }
             }
         }
     }
@@ -278,6 +442,11 @@ public class PlayerInventory : NetworkBehaviour
             Slots[i] = default;
         }
 
+        if (FlashlightActive.Value)
+        {
+            FlashlightActive.Value = false;
+        }
+
         Debug.Log($"[PlayerInventory] Cleared inventory for client {OwnerClientId}");
     }
 
@@ -307,6 +476,11 @@ public class PlayerInventory : NetworkBehaviour
 
             WorldItemPickup.SpawnPickup(slot.itemId.ToString(), slot.count, dropPos, dropVel);
             Slots[i] = default;
+        }
+
+        if (FlashlightActive.Value)
+        {
+            FlashlightActive.Value = false;
         }
 
         Debug.Log($"[PlayerInventory] Player {OwnerClientId} dropped all carried items on death.");
@@ -460,47 +634,388 @@ public class PlayerInventory : NetworkBehaviour
         WorldItemPickup.SpawnPickup(slot.itemId.ToString(), slot.count, spawnPos, transform.forward * 3.5f + Vector3.up * 1.5f);
 
         Slots[index] = default;
+
+        if (!IsHoldingFlashlight() && FlashlightActive.Value)
+        {
+            FlashlightActive.Value = false;
+        }
     }
 
-    private Light flashlightLight;
+    /// <summary>
+    /// Returns true if the currently selected hotbar slot holds the flashlight.
+    /// </summary>
+    public bool IsHoldingFlashlight()
+    {
+        ItemData selected = GetSelectedItem();
+        return selected != null && selected.ItemId == "flashlight";
+    }
+
+    /// <summary>
+    /// True only when the flashlight is toggled on AND actively held in the selected slot.
+    /// </summary>
+    public bool IsFlashlightShining
+    {
+        get
+        {
+            if (!IsHoldingFlashlight())
+            {
+                return false;
+            }
+
+            if (IsOwner && flashlightLight != null)
+            {
+                return flashlightLight.enabled;
+            }
+
+            return FlashlightActive.Value;
+        }
+    }
+
+    /// <summary>
+    /// Checks whether the inventory contains at least one item with the specified itemId.
+    /// </summary>
+    public bool HasItem(string itemId)
+    {
+        if (Slots == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            if (!Slots[i].IsEmpty && Slots[i].itemId.ToString() == itemId)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Checks whether all inventory slots are empty.
+    /// </summary>
+    public bool IsEmpty()
+    {
+        if (Slots == null)
+        {
+            return true;
+        }
+
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            if (!Slots[i].IsEmpty)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 
     /// <summary>
     /// Toggles the tactical flashlight beam mounted to the player's camera.
+    /// Synchronized across all clients via NetworkVariable.
     /// </summary>
     public void ToggleFlashlight()
     {
+        if (!IsOwner || !IsHoldingFlashlight())
+        {
+            return;
+        }
+
+        bool currentlyLit = flashlightLight != null ? flashlightLight.enabled : FlashlightActive.Value;
+        bool nextState = !currentlyLit;
+        ApplyFlashlightVisuals(nextState);
+        SetFlashlightActiveServerRpc(nextState, SelectedSlotIndex.Value);
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void SetFlashlightActiveServerRpc(bool desiredState, int slotIndex)
+    {
+        if (!desiredState || Slots == null || slotIndex < 0 || slotIndex >= Slots.Count)
+        {
+            FlashlightActive.Value = false;
+            return;
+        }
+
+        InventorySlot slot = Slots[slotIndex];
+        bool slotHasFlashlight = !slot.IsEmpty && slot.itemId.ToString() == "flashlight";
+        FlashlightActive.Value = slotHasFlashlight;
+    }
+
+    private void OnFlashlightActiveChanged(bool previous, bool current)
+    {
+        ApplyFlashlightVisuals(current);
+    }
+
+    private void RefreshFlashlightState()
+    {
+        if (!IsHoldingFlashlight())
+        {
+            if (IsServer && FlashlightActive.Value)
+            {
+                FlashlightActive.Value = false;
+            }
+            ApplyFlashlightVisuals(false);
+        }
+        else
+        {
+            ApplyFlashlightVisuals(FlashlightActive.Value);
+        }
+    }
+
+    private void ApplyFlashlightVisuals(bool active)
+    {
+        bool shouldShine = active && IsHoldingFlashlight();
+
+        if (IsOwner)
+        {
+            if (shouldShine || flashlightLight != null)
+            {
+                EnsureLocalFlashlight();
+            }
+
+            if (flashlightLight != null)
+            {
+                flashlightLight.enabled = shouldShine;
+            }
+            if (flashlightSoftFill != null)
+            {
+                flashlightSoftFill.enabled = shouldShine;
+            }
+            if (shouldShine)
+            {
+                UpdateLocalFlashlightPose();
+            }
+        }
+        else
+        {
+            if (shouldShine || thirdPersonFlashlight != null)
+            {
+                EnsureRemoteFlashlight();
+            }
+
+            if (thirdPersonFlashlight != null)
+            {
+                thirdPersonFlashlight.SetActive(shouldShine);
+                if (thirdPersonFlashlightSpot != null)
+                {
+                    thirdPersonFlashlightSpot.enabled = shouldShine;
+                }
+                if (thirdPersonFlashlightGlow != null)
+                {
+                    thirdPersonFlashlightGlow.enabled = shouldShine;
+                }
+                if (shouldShine)
+                {
+                    UpdateRemoteFlashlightPose();
+                }
+            }
+
+            UpdateThirdPersonLensEmission(shouldShine);
+        }
+    }
+
+    private void EnsureLocalFlashlight()
+    {
         if (flashlightLight == null)
         {
-            Camera cam = GetComponentInChildren<Camera>();
-            if (cam != null)
+            if (ownerCamera == null)
             {
-                Transform existing = cam.transform.Find("FlashlightBeam");
+                ownerCamera = GetComponentInChildren<Camera>(true);
+            }
+
+            if (ownerCamera != null)
+            {
+                Transform existing = ownerCamera.transform.Find("FlashlightBeam");
                 if (existing != null)
                 {
                     flashlightLight = existing.GetComponent<Light>();
+                    Transform fill = existing.Find("FlashlightFill");
+                    if (fill != null)
+                    {
+                        flashlightSoftFill = fill.GetComponent<Light>();
+                    }
                 }
                 else
                 {
                     GameObject lightGo = new GameObject("FlashlightBeam");
-                    lightGo.transform.parent = cam.transform;
-                    lightGo.transform.localPosition = new Vector3(0.2f, -0.15f, 0.3f);
+                    lightGo.transform.SetParent(ownerCamera.transform, false);
+                    lightGo.transform.localPosition = new Vector3(0.28f, -0.265f, 0.775f);
                     lightGo.transform.localRotation = Quaternion.identity;
+
                     flashlightLight = lightGo.AddComponent<Light>();
                     flashlightLight.type = LightType.Spot;
-                    flashlightLight.range = 28f;
-                    flashlightLight.spotAngle = 48f;
-                    flashlightLight.innerSpotAngle = 32f;
-                    flashlightLight.intensity = 2.8f;
-                    flashlightLight.color = new Color(1f, 0.96f, 0.85f);
+                    flashlightLight.range = 34f;
+                    flashlightLight.spotAngle = 56f;
+                    flashlightLight.innerSpotAngle = 22f;
+                    flashlightLight.intensity = 14f;
+                    flashlightLight.color = new Color(1f, 0.96f, 0.88f);
                     flashlightLight.shadows = LightShadows.Hard;
+
+                    GameObject fillGo = new GameObject("FlashlightFill");
+                    fillGo.transform.SetParent(lightGo.transform, false);
+                    fillGo.transform.localPosition = Vector3.zero;
+                    flashlightSoftFill = fillGo.AddComponent<Light>();
+                    flashlightSoftFill.type = LightType.Point;
+                    flashlightSoftFill.range = 4.0f;
+                    flashlightSoftFill.intensity = 0.8f;
+                    flashlightSoftFill.color = new Color(1f, 0.95f, 0.85f);
+                    flashlightSoftFill.shadows = LightShadows.None;
                 }
             }
         }
+    }
 
-        if (flashlightLight != null)
+    private void EnsureRemoteFlashlight()
+    {
+        if (thirdPersonFlashlight == null)
         {
-            flashlightLight.enabled = !flashlightLight.enabled;
+            Transform holder = transform.Find("CameraHolder");
+            bool hasCameraHolder = holder != null;
+            if (!hasCameraHolder)
+            {
+                holder = transform;
+            }
+
+            Transform existing = holder.Find("RemoteFlashlightBeam");
+            if (existing != null)
+            {
+                thirdPersonFlashlight = existing.gameObject;
+                thirdPersonFlashlightSpot = existing.GetComponent<Light>();
+                Transform glow = existing.Find("RemoteFlashlightGlow");
+                if (glow != null)
+                {
+                    thirdPersonFlashlightGlow = glow.GetComponent<Light>();
+                }
+            }
+            else
+            {
+                thirdPersonFlashlight = new GameObject("RemoteFlashlightBeam");
+                thirdPersonFlashlight.transform.SetParent(holder, false);
+                thirdPersonFlashlight.transform.localPosition = hasCameraHolder
+                    ? new Vector3(0.28f, -0.10f, 0.58f)
+                    : new Vector3(0.28f, 1.10f, 0.58f);
+                thirdPersonFlashlight.transform.localRotation = Quaternion.identity;
+
+                thirdPersonFlashlightSpot = thirdPersonFlashlight.AddComponent<Light>();
+                thirdPersonFlashlightSpot.type = LightType.Spot;
+                thirdPersonFlashlightSpot.range = 34f;
+                thirdPersonFlashlightSpot.spotAngle = 56f;
+                thirdPersonFlashlightSpot.innerSpotAngle = 22f;
+                thirdPersonFlashlightSpot.intensity = 14f;
+                thirdPersonFlashlightSpot.color = new Color(1f, 0.96f, 0.88f);
+                thirdPersonFlashlightSpot.shadows = LightShadows.Hard;
+
+                // Subtle local glow so teammates visibly radiate light around their flashlight head
+                GameObject glowGo = new GameObject("RemoteFlashlightGlow");
+                glowGo.transform.SetParent(thirdPersonFlashlight.transform, false);
+                glowGo.transform.localPosition = new Vector3(0f, 0f, -0.08f);
+                thirdPersonFlashlightGlow = glowGo.AddComponent<Light>();
+                thirdPersonFlashlightGlow.type = LightType.Point;
+                thirdPersonFlashlightGlow.range = 5.0f;
+                thirdPersonFlashlightGlow.intensity = 1.6f;
+                thirdPersonFlashlightGlow.color = new Color(1f, 0.96f, 0.88f);
+                thirdPersonFlashlightGlow.shadows = LightShadows.None;
+            }
         }
+    }
+
+    private void UpdateLocalFlashlightPose()
+    {
+        if (flashlightLight == null)
+        {
+            return;
+        }
+
+        if (ownerCamera == null)
+        {
+            ownerCamera = GetComponentInChildren<Camera>(true);
+            if (ownerCamera == null)
+            {
+                return;
+            }
+        }
+
+        Vector3 origin = ownerCamera.transform.position;
+        Vector3 desiredTip;
+        if (viewmodel != null && viewmodel.TryGetFlashlightTipWorldPose(out Vector3 vmTip, out _))
+        {
+            desiredTip = vmTip;
+        }
+        else
+        {
+            desiredTip = ownerCamera.transform.TransformPoint(new Vector3(0.28f, -0.265f, 0.775f));
+        }
+
+        Vector3 clampedPos = ClampPositionBeforeWalls(origin, desiredTip);
+        Vector3 aimTarget = origin + ownerCamera.transform.forward * 16f;
+        Vector3 aimDir = aimTarget - clampedPos;
+        if (aimDir.sqrMagnitude < 0.01f)
+        {
+            aimDir = ownerCamera.transform.forward;
+        }
+
+        flashlightLight.transform.position = clampedPos;
+        flashlightLight.transform.rotation = Quaternion.LookRotation(aimDir.normalized, ownerCamera.transform.up);
+    }
+
+    private void UpdateRemoteFlashlightPose()
+    {
+        if (thirdPersonFlashlight == null)
+        {
+            return;
+        }
+
+        Transform holder = thirdPersonFlashlight.transform.parent;
+        if (holder == null)
+        {
+            return;
+        }
+
+        bool isCamHolder = holder != transform;
+        Vector3 localDefault = isCamHolder
+            ? new Vector3(0.28f, -0.10f, 0.58f)
+            : new Vector3(0.28f, 1.10f, 0.58f);
+
+        Vector3 origin = holder.position;
+        Vector3 desiredTip = holder.TransformPoint(localDefault);
+        thirdPersonFlashlight.transform.position = ClampPositionBeforeWalls(origin, desiredTip);
+        thirdPersonFlashlight.transform.rotation = holder.rotation;
+    }
+
+    private Vector3 ClampPositionBeforeWalls(Vector3 origin, Vector3 desiredPos)
+    {
+        Vector3 delta = desiredPos - origin;
+        float dist = delta.magnitude;
+        if (dist < 0.001f)
+        {
+            return desiredPos;
+        }
+
+        Vector3 dir = delta / dist;
+        int hitCount = Physics.SphereCastNonAlloc(origin, 0.06f, dir, flashlightWallHits, dist, ~0, QueryTriggerInteraction.Ignore);
+        float closestDist = dist;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit hit = flashlightWallHits[i];
+            if (hit.collider == null || hit.collider.transform.IsChildOf(transform))
+            {
+                continue;
+            }
+
+            if (hit.distance < closestDist)
+            {
+                closestDist = hit.distance;
+            }
+        }
+
+        if (closestDist < dist)
+        {
+            return origin + dir * Mathf.Max(0.12f, closestDist - 0.05f);
+        }
+
+        return desiredPos;
     }
 
     /// <summary>

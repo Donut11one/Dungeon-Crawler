@@ -373,10 +373,20 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             grabThrow.ForceDrop();
         }
 
+        RagdollController ragdoll = GetComponent<RagdollController>();
+        if (ragdoll != null)
+        {
+            ragdoll.ForceRecoverClient();
+        }
+
         PlayerController controller = GetComponent<PlayerController>();
         if (controller != null)
         {
             controller.ResetAfterRagdoll(transform.eulerAngles.y);
+            if (IsOwner && controller.CanLockCursor())
+            {
+                controller.LockCursor();
+            }
         }
     }
 }

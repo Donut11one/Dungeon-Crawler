@@ -223,18 +223,20 @@ public class DungeonRoom : MonoBehaviour
         if (rend != null)
         {
             Material matToUse = roomWallMaterial;
-            if (matToUse == null)
+            float tile = 4f;
+            DungeonBuilder db = FindAnyObjectByType<DungeonBuilder>();
+            if (db != null)
             {
-                DungeonBuilder db = FindAnyObjectByType<DungeonBuilder>();
-                if (db != null)
+                if (matToUse == null)
                 {
                     matToUse = db.WallMaterial;
                 }
+                tile = db.TextureTileSize;
             }
 
             if (matToUse != null)
             {
-                MaterialHelper.ApplyCustomMaterial(rend, matToUse, color, localScale);
+                MaterialHelper.ApplyCustomMaterial(rend, matToUse, color, localScale, tile);
             }
             else
             {

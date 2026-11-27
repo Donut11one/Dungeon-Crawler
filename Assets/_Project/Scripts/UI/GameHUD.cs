@@ -29,6 +29,7 @@ public class GameHUD : MonoBehaviour
     private GUIStyle enemyBarTextStyle;
     private bool stylesInitialized;
     private Texture2D solidTexture;
+    private bool isRoundOverSummaryActive = false;
 
     // Quota celebration banner state
     private static float quotaCelebrationTimer = 0f;
@@ -172,14 +173,28 @@ public class GameHUD : MonoBehaviour
     }
 
     /// <summary>
+    /// Shows the round over summary screen and frees cursor.
+    /// </summary>
+    public void ShowRoundOver()
+    {
+        isRoundOverSummaryActive = true;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
+    /// <summary>
     /// Called across network via GameManager ClientRpc when round starts, restarts, or returns to lobby.
     /// Wipes all stale round-over states, extraction statuses, and locks cursor for gameplay.
     /// </summary>
     public void ClearRoundState()
     {
+        isRoundOverSummaryActive = false;
         extractedThisRound.Clear();
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        if (InGameMenuUI.Instance == null || !InGameMenuUI.Instance.IsOpen)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
     }
 
     /// <summary>
@@ -451,7 +466,8 @@ public class GameHUD : MonoBehaviour
                 fontStyle = FontStyle.Bold
             };
             activeItemStyle.normal.textColor = activeColor;
-            GUI.Label(new Rect(startX - 75f, startY - 23f, totalWidth + 150f, 20f), $"[ {activeName}  |  [L-Click] Toggle Flashlight ]", activeItemStyle);
+            string state = inventory.IsFlashlightShining ? "ON" : "OFF";
+            GUI.Label(new Rect(startX - 75f, startY - 23f, totalWidth + 150f, 20f), $"[ {activeName} ({state})  |  [L-Click] / [F] Toggle Beam ]", activeItemStyle);
         }
         else if (activeItem != null && activeItem.Type == ItemType.Scrap)
         {
@@ -1160,6 +1176,11 @@ public class GameHUD : MonoBehaviour
 
         if (state == GameManager.GameState.RoundOver)
         {
+            if (!isRoundOverSummaryActive)
+            {
+                return;
+            }
+
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
 
@@ -1309,6 +1330,10 @@ public class GameHUD : MonoBehaviour
             };
             returnStyle.normal.textColor = new Color(1f, 0.85f, 0.2f);
             GUI.Label(new Rect(0f, cardY + cardHeight + 18f, Screen.width, 35f), autoReturnMsg, returnStyle);
+        }
+        else
+        {
+            isRoundOverSummaryActive = false;
         }
     }
 

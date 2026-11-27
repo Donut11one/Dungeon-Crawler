@@ -121,6 +121,15 @@ public class RagdollController : NetworkBehaviour
         IsRagdolled.Value = false;
     }
 
+    /// <summary>
+    /// Client & Server: Force exit ragdoll immediately to restore constraints, upright rotation, and animator.
+    /// </summary>
+    public void ForceRecoverClient()
+    {
+        ragdollTimer = 0f;
+        ExitRagdoll();
+    }
+
     [Rpc(SendTo.ClientsAndHost)]
     private void ApplyRagdollForceClientRpc(Vector3 force)
     {

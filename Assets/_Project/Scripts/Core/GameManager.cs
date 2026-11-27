@@ -105,6 +105,11 @@ public class GameManager : NetworkBehaviour
         }
         Instance = this;
 
+        if (GetComponent<DungeonLightingManager>() == null && FindAnyObjectByType<DungeonLightingManager>() == null)
+        {
+            gameObject.AddComponent<DungeonLightingManager>();
+        }
+
         if (GetComponent<LobbyArea>() == null && FindAnyObjectByType<LobbyArea>() == null)
         {
             gameObject.AddComponent<LobbyArea>();
@@ -114,6 +119,8 @@ public class GameManager : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
+
+        CurrentState.OnValueChanged += OnGameStateNetworkChanged;
 
         if (IsServer)
         {
@@ -130,6 +137,46 @@ public class GameManager : NetworkBehaviour
                 DaysRemaining.Value = totalDaysPerCycle;
             }
             SyncPlayerWallets();
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        CurrentState.OnValueChanged -= OnGameStateNetworkChanged;
+        base.OnNetworkDespawn();
+    }
+
+    private void OnGameStateNetworkChanged(GameState previous, GameState current)
+    {
+        GameHUD hud = FindAnyObjectByType<GameHUD>();
+        if (current == GameState.Lobby || current == GameState.Playing)
+        {
+            if (hud != null)
+            {
+                hud.ClearRoundState();
+            }
+            if (InGameMenuUI.Instance == null || !InGameMenuUI.Instance.IsOpen)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
+            {
+                PlayerController pc = NetworkManager.Singleton.LocalClient.PlayerObject.GetComponent<PlayerController>();
+                if (pc != null)
+                {
+                    pc.OnGameStateChanged(current);
+                }
+            }
+        }
+        else if (current == GameState.RoundOver)
+        {
+            if (hud != null)
+            {
+                hud.ShowRoundOver();
+            }
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
         }
     }
 
@@ -630,10 +677,24 @@ public class GameManager : NetworkBehaviour
     private void OnRoundStartedClientRpc()
     {
         Debug.Log("[GameManager] Expedition Started! Dive into the dungeon!");
+        extractedPlayers.Clear();
         GameHUD hud = FindAnyObjectByType<GameHUD>();
         if (hud != null)
         {
             hud.ClearRoundState();
+        }
+        if (InGameMenuUI.Instance == null || !InGameMenuUI.Instance.IsOpen)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
+        {
+            PlayerController pc = NetworkManager.Singleton.LocalClient.PlayerObject.GetComponent<PlayerController>();
+            if (pc != null)
+            {
+                pc.OnReturnedToLobby();
+            }
         }
     }
 
@@ -641,10 +702,24 @@ public class GameManager : NetworkBehaviour
     private void OnReturnedToLobbyClientRpc()
     {
         Debug.Log("[GameManager] Returned to Staging Lobby.");
+        extractedPlayers.Clear();
         GameHUD hud = FindAnyObjectByType<GameHUD>();
         if (hud != null)
         {
             hud.ClearRoundState();
+        }
+        if (InGameMenuUI.Instance == null || !InGameMenuUI.Instance.IsOpen)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
+        {
+            PlayerController pc = NetworkManager.Singleton.LocalClient.PlayerObject.GetComponent<PlayerController>();
+            if (pc != null)
+            {
+                pc.OnReturnedToLobby();
+            }
         }
     }
 
@@ -652,10 +727,24 @@ public class GameManager : NetworkBehaviour
     private void OnRoundRestartedClientRpc()
     {
         Debug.Log("[GameManager] Round Restarted!");
+        extractedPlayers.Clear();
         GameHUD hud = FindAnyObjectByType<GameHUD>();
         if (hud != null)
         {
             hud.ClearRoundState();
+        }
+        if (InGameMenuUI.Instance == null || !InGameMenuUI.Instance.IsOpen)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
+        {
+            PlayerController pc = NetworkManager.Singleton.LocalClient.PlayerObject.GetComponent<PlayerController>();
+            if (pc != null)
+            {
+                pc.OnReturnedToLobby();
+            }
         }
     }
 
@@ -663,12 +752,20 @@ public class GameManager : NetworkBehaviour
     private void OnRoundOverClientRpc()
     {
         Debug.Log("[GameManager] Round Over - Time's Up!");
+        GameHUD hud = FindAnyObjectByType<GameHUD>();
+        if (hud != null)
+        {
+            hud.ShowRoundOver();
+        }
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
     [Rpc(SendTo.ClientsAndHost)]
     private void OnPlayerExtractedClientRpc(ulong clientId, int bankedAmount, int totalBank)
     {
         Debug.Log($"[GameManager] Player {clientId} ESCAPED to Lobby! Banked +${bankedAmount} (Total Bank: ${totalBank})");
+        extractedPlayers.Add(clientId);
         GameHUD hud = FindAnyObjectByType<GameHUD>();
         if (hud != null)
         {

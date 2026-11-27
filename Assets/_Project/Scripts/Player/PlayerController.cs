@@ -173,6 +173,8 @@ public class PlayerController : NetworkBehaviour
             playerCamera.transform.localRotation = Quaternion.identity;
             playerCamera.enabled = true;
             playerCamera.tag = "MainCamera";
+            playerCamera.backgroundColor = Color.black;
+            playerCamera.clearFlags = CameraClearFlags.SolidColor;
         }
 
         // Deactivate scene static camera so player's camera is the active viewpoint
@@ -292,7 +294,8 @@ public class PlayerController : NetworkBehaviour
                     return false;
                 }
 
-                if (GameManager.Instance.IsPlayerExtracted(OwnerClientId))
+                if (GameManager.Instance.CurrentState.Value == GameManager.GameState.Playing &&
+                    GameManager.Instance.IsPlayerExtracted(OwnerClientId))
                 {
                     return false;
                 }
@@ -308,27 +311,32 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    private bool CanLockCursor()
+    public bool CanLockCursor()
     {
         if (InGameMenuUI.Instance != null && InGameMenuUI.Instance.IsOpen)
         {
             return false;
         }
+
         if (ArmoryShopUI.Instance != null && ArmoryShopUI.Instance.IsOpen)
         {
             return false;
         }
+
         if (GameManager.Instance != null)
         {
             if (GameManager.Instance.CurrentState.Value == GameManager.GameState.RoundOver)
             {
                 return false;
             }
-            if (GameManager.Instance.IsPlayerExtracted(OwnerClientId))
+
+            if (GameManager.Instance.CurrentState.Value == GameManager.GameState.Playing &&
+                GameManager.Instance.IsPlayerExtracted(OwnerClientId))
             {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -338,6 +346,16 @@ public class PlayerController : NetworkBehaviour
         {
             return;
         }
+
+        // Left-click / right-click cursor recapture: clicking the game window re-locks the cursor
+        if (Cursor.lockState != CursorLockMode.Locked && CanLockCursor())
+        {
+            if (Mouse.current != null && (Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.wasPressedThisFrame))
+            {
+                LockCursor();
+            }
+        }
+
         if (!CanControl)
         {
             if (rb != null && !rb.isKinematic)
@@ -710,6 +728,75 @@ public class PlayerController : NetworkBehaviour
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             rb.linearDamping = 0f;
+        }
+    }
+
+    /// <summary>
+    /// Locks cursor to the game view and prevents single-frame mouse look spikes.
+    /// </summary>
+    public void LockCursor()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        skipLookFrames = 3;
+    }
+
+    /// <summary>
+    /// Called when returning to the staging lobby to re-lock cursor and reset movement states.
+    /// </summary>
+    public void OnReturnedToLobby()
+    {
+        if (!IsOwner)
+        {
+            return;
+        }
+
+        if (CanLockCursor())
+        {
+            LockCursor();
+        }
+
+        skipLookFrames = 3;
+        jumpBufferTimer = 0f;
+        jumpCooldownTimer = 0.2f;
+
+        if (rb != null)
+        {
+            rb.freezeRotation = true;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+    }
+
+    /// <summary>
+    /// Reacts to game state changes to enforce cursor locking.
+    /// </summary>
+    public void OnGameStateChanged(GameManager.GameState state)
+    {
+        if (!IsOwner)
+        {
+            return;
+        }
+
+        if (state == GameManager.GameState.Lobby || state == GameManager.GameState.Playing)
+        {
+            if (CanLockCursor())
+            {
+                LockCursor();
+            }
+        }
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!IsOwner)
+        {
+            return;
+        }
+
+        if (hasFocus && CanLockCursor())
+        {
+            LockCursor();
         }
     }
 }

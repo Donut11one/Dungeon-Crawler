@@ -348,6 +348,7 @@ public class DungeonBuilder : NetworkBehaviour
     // ── Unity / NGO lifecycle ────────────────────────────────────────────────
     private void Awake()
     {
+        DungeonLightingManager.ApplyDarkAtmosphere();
         NetworkPrefabBootstrapper.EnsureAllPrefabsRegistered();
         EnsureLeverPrefab();
         EnsureDoorPrefab();
@@ -683,31 +684,26 @@ public class DungeonBuilder : NetworkBehaviour
             return;
         }
 
-        if (enemyPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(enemyPrefab))
+        if (NetworkManager.Singleton.IsListening)
         {
-            NetworkManager.Singleton.AddNetworkPrefab(enemyPrefab);
+            return;
         }
+
+        NetworkPrefabBootstrapper.RegisterPrefabIfMissing(enemyPrefab);
 
         if (enemyPrefabs != null)
         {
             for (int i = 0; i < enemyPrefabs.Count; i++)
             {
-                if (enemyPrefabs[i] != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(enemyPrefabs[i]))
+                if (enemyPrefabs[i] != null)
                 {
-                    NetworkManager.Singleton.AddNetworkPrefab(enemyPrefabs[i]);
+                    NetworkPrefabBootstrapper.RegisterPrefabIfMissing(enemyPrefabs[i]);
                 }
             }
         }
 
-        if (leverPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(leverPrefab))
-        {
-            NetworkManager.Singleton.AddNetworkPrefab(leverPrefab);
-        }
-
-        if (doorPrefab != null && !NetworkManager.Singleton.NetworkConfig.Prefabs.Contains(doorPrefab))
-        {
-            NetworkManager.Singleton.AddNetworkPrefab(doorPrefab);
-        }
+        NetworkPrefabBootstrapper.RegisterPrefabIfMissing(leverPrefab);
+        NetworkPrefabBootstrapper.RegisterPrefabIfMissing(doorPrefab);
     }
 
     // ── Layout Assembly ──────────────────────────────────────────────────────
@@ -914,6 +910,36 @@ public class DungeonBuilder : NetworkBehaviour
                 Vector3 extPos = room.transform.TransformPoint(roomData.extractionLocalPosition);
                 CreateCustomExtractionPoint(extPos);
             }
+
+            // Spawn facility ceiling light fixture for the room
+            if (roomData.lights != null && roomData.lights.Count > 0)
+            {
+                for (int l = 0; l < roomData.lights.Count; l++)
+                {
+                    LightFixturePlacementData lf = roomData.lights[l];
+                    FacilityLightFixture.CreateFixture(
+                        room.transform,
+                        lf.fixtureName,
+                        lf.localPosition,
+                        Quaternion.Euler(lf.localEulerAngles),
+                        lf.lightType,
+                        lf.flickerMode
+                    );
+                }
+            }
+            else
+            {
+                Vector3 lightPos = new Vector3(0f, h - 0.12f, 0f);
+                LightFlickerMode flicker = (r % 4 == 2) ? LightFlickerMode.OccasionalFlicker : LightFlickerMode.Steady;
+                FacilityLightFixture.CreateFixture(
+                    room.transform,
+                    $"Light_{roomData.roomId}",
+                    lightPos,
+                    Quaternion.identity,
+                    FacilityLightType.FluorescentCeiling,
+                    flicker
+                );
+            }
         }
     }
 
@@ -1041,6 +1067,85 @@ public class DungeonBuilder : NetworkBehaviour
 
         enemySpawnPoints.Add(new Vector3(-23f, 0.1f, 0f));
         enemySpawnArchetypes.Add("");
+
+        // ── FACILITY LOCAL LIGHT PROPS ─────────────────────────────────────────
+        // Main Hall: Dual overhead fluorescent ceiling fixtures
+        FacilityLightFixture.CreateFixture(
+            dungeonRoot.transform,
+            "Light_MainHall_1",
+            new Vector3(-4f, wallHeight - 0.12f, 0f),
+            Quaternion.identity,
+            FacilityLightType.FluorescentCeiling,
+            LightFlickerMode.Steady
+        );
+        FacilityLightFixture.CreateFixture(
+            dungeonRoot.transform,
+            "Light_MainHall_2",
+            new Vector3(4f, wallHeight - 0.12f, 0f),
+            Quaternion.identity,
+            FacilityLightType.FluorescentCeiling,
+            LightFlickerMode.OccasionalFlicker
+        );
+
+        // North Corridor: Overhead fixture
+        FacilityLightFixture.CreateFixture(
+            dungeonRoot.transform,
+            "Light_NorthCorridor",
+            new Vector3(0f, wallHeight - 0.12f, 15f),
+            Quaternion.identity,
+            FacilityLightType.FluorescentCeiling,
+            LightFlickerMode.Steady
+        );
+
+        // North Storage: Overhead fixture with slight stutter
+        FacilityLightFixture.CreateFixture(
+            dungeonRoot.transform,
+            "Light_NorthStorage",
+            new Vector3(0f, wallHeight - 0.12f, 26f),
+            Quaternion.identity,
+            FacilityLightType.FluorescentCeiling,
+            LightFlickerMode.OccasionalFlicker
+        );
+
+        // East Corridor: Rotated fixture
+        FacilityLightFixture.CreateFixture(
+            dungeonRoot.transform,
+            "Light_EastCorridor",
+            new Vector3(15f, wallHeight - 0.12f, 0f),
+            Quaternion.Euler(0f, 90f, 0f),
+            FacilityLightType.FluorescentCeiling,
+            LightFlickerMode.Steady
+        );
+
+        // East Chamber: Warm incandescent lighting
+        FacilityLightFixture.CreateFixture(
+            dungeonRoot.transform,
+            "Light_EastChamber",
+            new Vector3(26f, wallHeight - 0.12f, 0f),
+            Quaternion.identity,
+            FacilityLightType.WarmIncandescent,
+            LightFlickerMode.Steady
+        );
+
+        // West Corridor: Rotated fixture
+        FacilityLightFixture.CreateFixture(
+            dungeonRoot.transform,
+            "Light_WestCorridor",
+            new Vector3(-14f, wallHeight - 0.12f, 0f),
+            Quaternion.Euler(0f, 90f, 0f),
+            FacilityLightType.FluorescentCeiling,
+            LightFlickerMode.OccasionalFlicker
+        );
+
+        // West Dead-End: Emergency wall-bulkhead red alert strobe!
+        FacilityLightFixture.CreateFixture(
+            dungeonRoot.transform,
+            "Light_WestDeadEnd_Warning",
+            new Vector3(-23f, wallHeight - 0.12f, 0f),
+            Quaternion.identity,
+            FacilityLightType.WarningStrobeRed,
+            LightFlickerMode.SlowPulse
+        );
     }
 
     // ── Doorway descriptor ───────────────────────────────────────────────────
@@ -1314,18 +1419,24 @@ public class DungeonBuilder : NetworkBehaviour
                     continue;
                 }
 
-                if (child.name.StartsWith("Wall"))
+                bool isWall = child.name.StartsWith("Wall", System.StringComparison.OrdinalIgnoreCase) ||
+                              child.name.StartsWith("Pillar", System.StringComparison.OrdinalIgnoreCase);
+                bool isFloor = child.name.IndexOf("Floor", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isCeiling = child.name.IndexOf("Ceiling", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (isWall)
                 {
-                    if (wallMaterial != null)
+                    Material mat = rm.RoomWallMaterial != null ? rm.RoomWallMaterial : wallMaterial;
+                    if (mat != null)
                     {
-                        MaterialHelper.ApplyCustomMaterial(rend, wallMaterial, wallColor, child.localScale, textureTileSize);
+                        MaterialHelper.ApplyCustomMaterial(rend, mat, wallColor, child.localScale, textureTileSize);
                     }
                     else
                     {
                         MaterialHelper.ApplyMaterial(rend, wallColor);
                     }
                 }
-                else if (child.name == "Floor")
+                else if (isFloor)
                 {
                     if (floorMaterial != null)
                     {
@@ -1336,7 +1447,7 @@ public class DungeonBuilder : NetworkBehaviour
                         MaterialHelper.ApplyMaterial(rend, floorColor);
                     }
                 }
-                else if (child.name == "Ceiling")
+                else if (isCeiling)
                 {
                     if (ceilingMaterial != null)
                     {
@@ -1608,8 +1719,27 @@ public class DungeonBuilder : NetworkBehaviour
 
     // ── Editor Helpers ───────────────────────────────────────────────────────
 #if UNITY_EDITOR
+    private void OnValidate()
+    {
+        if (!Application.isPlaying)
+        {
+            UnityEditor.EditorApplication.delayCall += RefreshMaterialsDelayed;
+        }
+    }
+
+    private void RefreshMaterialsDelayed()
+    {
+        if (this == null)
+        {
+            return;
+        }
+
+        ApplyMaterialsToAllSceneSurfaces();
+    }
+
     public void BuildDungeonInEditor()
     {
+        DungeonLightingManager.ApplyDarkAtmosphere();
         EnsureLeverPrefab();
         EnsureDoorPrefab();
         EnsureEnemyPrefab();

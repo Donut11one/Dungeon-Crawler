@@ -6,6 +6,7 @@ using UnityEngine;
 /// Renders stylized 3D weapon models in the player's camera view when items are equipped.
 /// Features smooth movement bobbing, instant weapon recoil kick, muzzle flashes, and reload animations.
 /// </summary>
+[DefaultExecutionOrder(-5)]
 public class FirstPersonViewmodel : NetworkBehaviour
 {
     [Header("Viewmodel Positioning")]
@@ -28,6 +29,10 @@ public class FirstPersonViewmodel : NetworkBehaviour
     private float reloadTimer;
     private float reloadDuration;
     private float bobTimer;
+
+    private Transform flashlightTip;
+    private Material flashlightLensMat;
+    private bool lastFlashlightGlowState;
 
     private void Awake()
     {
@@ -99,6 +104,7 @@ public class FirstPersonViewmodel : NetworkBehaviour
 
         CheckEquippedItemChange();
         UpdateMuzzleFlash();
+        UpdateFlashlightLensGlow();
     }
 
     private void LateUpdate()
@@ -175,6 +181,10 @@ public class FirstPersonViewmodel : NetworkBehaviour
             Destroy(currentModel);
             currentModel = null;
         }
+
+        flashlightTip = null;
+        flashlightLensMat = null;
+        lastFlashlightGlowState = false;
 
         if (item == null)
         {
@@ -305,12 +315,83 @@ public class FirstPersonViewmodel : NetworkBehaviour
     {
         Color torchBlack = new Color(0.20f, 0.22f, 0.25f);
         Color bezelYellow = new Color(0.95f, 0.85f, 0.20f);
+        Color lensIdle = new Color(0.35f, 0.35f, 0.32f);
 
         // Handle body
         CreatePart(parent, "Handle", new Vector3(0f, -0.03f, 0.12f), new Vector3(0.042f, 0.042f, 0.22f), torchBlack);
 
         // Wide reflector head
         CreatePart(parent, "Bezel", new Vector3(0f, -0.025f, 0.24f), new Vector3(0.075f, 0.075f, 0.07f), bezelYellow);
+
+        // Front glowing lens face
+        GameObject lens = CreatePart(parent, "Lens", new Vector3(0f, -0.025f, 0.277f), new Vector3(0.056f, 0.056f, 0.008f), lensIdle);
+        Renderer lensRend = lens.GetComponent<Renderer>();
+        if (lensRend != null)
+        {
+            flashlightLensMat = lensRend.material;
+            ApplyLensEmission(inventory != null && inventory.IsFlashlightShining);
+        }
+
+        // Exact front tip marker so the spotlight beam originates directly from the bezel lens
+        GameObject tipGo = new GameObject("FlashlightTip");
+        tipGo.transform.SetParent(parent, false);
+        tipGo.transform.localPosition = new Vector3(0f, -0.025f, 0.295f);
+        tipGo.transform.localRotation = Quaternion.identity;
+        flashlightTip = tipGo.transform;
+    }
+
+    private void UpdateFlashlightLensGlow()
+    {
+        if (flashlightLensMat == null || inventory == null)
+        {
+            return;
+        }
+
+        bool shining = inventory.IsFlashlightShining;
+        if (shining != lastFlashlightGlowState)
+        {
+            ApplyLensEmission(shining);
+        }
+    }
+
+    private void ApplyLensEmission(bool shining)
+    {
+        lastFlashlightGlowState = shining;
+        if (flashlightLensMat == null)
+        {
+            return;
+        }
+
+        if (shining)
+        {
+            Color litCol = new Color(1f, 0.96f, 0.85f);
+            flashlightLensMat.color = litCol;
+            flashlightLensMat.EnableKeyword("_EMISSION");
+            flashlightLensMat.SetColor("_EmissionColor", litCol * 3.0f);
+        }
+        else
+        {
+            flashlightLensMat.color = new Color(0.32f, 0.34f, 0.36f);
+            flashlightLensMat.DisableKeyword("_EMISSION");
+            flashlightLensMat.SetColor("_EmissionColor", Color.black);
+        }
+    }
+
+    /// <summary>
+    /// Returns the world position and rotation of the front lens tip when holding the flashlight.
+    /// </summary>
+    public bool TryGetFlashlightTipWorldPose(out Vector3 worldPos, out Quaternion worldRot)
+    {
+        if (flashlightTip != null && currentItemId == "flashlight")
+        {
+            worldPos = flashlightTip.position;
+            worldRot = flashlightTip.rotation;
+            return true;
+        }
+
+        worldPos = Vector3.zero;
+        worldRot = Quaternion.identity;
+        return false;
     }
 
     private void BuildGenericToolModel(Transform parent, Color accent)
@@ -337,6 +418,8 @@ public class FirstPersonViewmodel : NetworkBehaviour
         if (r != null)
         {
             r.material = MaterialHelper.CreateLitMaterial(r, color);
+            // Viewmodels float in camera space and must never cast giant shadows on the flashlight beam
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
         return part;

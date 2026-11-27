@@ -41,14 +41,15 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
+    lights: []
     coinSpawns: []
     enemySpawns: []
     playerSpawns: []
     hasExtractionPoint: 0
     extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: ConnectingCorridor_921
-    roomLabel: ConnectingCorridor_921
-    position: {x: 0, y: -0.00000018937192, z: 36}
+  - roomId: ConnectingCorridor_539
+    roomLabel: ConnectingCorridor_539
+    position: {x: 10.18, y: -0.00000004639446, z: 11.93}
     rotation: {x: -0, y: 0, z: 0}
     dimensions: {x: 4, y: 4, z: 14}
     floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
@@ -70,35 +71,7 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
-    coinSpawns: []
-    enemySpawns: []
-    playerSpawns: []
-    hasExtractionPoint: 0
-    extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: Room_1
-    roomLabel: Room_1
-    position: {x: 9.918, y: 0, z: 0}
-    rotation: {x: -0, y: 0, z: 0}
-    dimensions: {x: 10, y: 4, z: 10}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 3
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    - side: 0
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers: []
-    doors: []
-    props: []
+    lights: []
     coinSpawns: []
     enemySpawns: []
     playerSpawns: []
@@ -122,42 +95,40 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
+    lights:
+    - fixtureName: CeilingLight_Fluorescent
+      localPosition: {x: -5, y: 3.88, z: -10}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      lightType: 0
+      flickerMode: 0
+    - fixtureName: CeilingLight_Fluorescent
+      localPosition: {x: 6, y: 3.88, z: -12}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      lightType: 0
+      flickerMode: 0
+    - fixtureName: CeilingLight_Warm
+      localPosition: {x: 8, y: 3.88, z: 0}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      lightType: 3
+      flickerMode: 2
+    - fixtureName: CeilingLight_Warm
+      localPosition: {x: -5, y: 3.88, z: -1}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      lightType: 3
+      flickerMode: 2
     coinSpawns: []
     enemySpawns:
     - localPosition: {x: -8, y: 0.1, z: 5}
       enemyId: flesh_brute
-    - localPosition: {x: 4, y: 0.1, z: -4}
-      enemyId: scrap_scavenger
     - localPosition: {x: -3, y: 0.1, z: -3}
       enemyId: scrap_scavenger
     - localPosition: {x: -4.73305, y: 0.1, z: -5.4384727}
       enemyId: swarm_crawler
+    - localPosition: {x: 4, y: 0.1, z: -4}
+      enemyId: scrap_scavenger
     playerSpawns: []
     hasExtractionPoint: 0
     extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: ExtractionChamber_928
-    roomLabel: ExtractionChamber_928
-    position: {x: 10, y: -0.0000007575168, z: 36}
-    rotation: {x: 0, y: 270, z: 0}
-    dimensions: {x: 10, y: 4, z: 12}
-    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
-    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
-    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-    doorways:
-    - side: 3
-      width: 3.2
-      offset: 0
-      hasDoor: 0
-      doorChannel: 
-      doorStartsOpen: 0
-    levers: []
-    doors: []
-    props: []
-    coinSpawns: []
-    enemySpawns: []
-    playerSpawns: []
-    hasExtractionPoint: 1
-    extractionLocalPosition: {x: 0, y: 0.05, z: 0}
   - roomId: CoopPuzzleVault_893
     roomLabel: CoopPuzzleVault_893
     position: {x: 0, y: -0.00000014932746, z: 10}
@@ -197,6 +168,47 @@ MonoBehaviour:
       mechanismChannel: Vault_63
       startsOpen: 0
     props: []
+    lights:
+    - fixtureName: EmergencyBulkhead_Amber
+      localPosition: {x: 0, y: 3.6000001, z: 5}
+      localEulerAngles: {x: -0, y: 180, z: 0}
+      lightType: 1
+      flickerMode: 1
+    coinSpawns: []
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: Room_1
+    roomLabel: Room_1
+    position: {x: 9.918, y: 0, z: 0}
+    rotation: {x: -0, y: 0, z: 0}
+    dimensions: {x: 10, y: 4, z: 10}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 3
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    - side: 0
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    props: []
+    lights:
+    - fixtureName: CeilingLight_Fluorescent
+      localPosition: {x: -0.9180002, y: 3.88, z: 1}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      lightType: 0
+      flickerMode: 0
     coinSpawns: []
     enemySpawns: []
     playerSpawns: []
@@ -232,6 +244,12 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
+    lights:
+    - fixtureName: EmergencyBulkhead_Amber
+      localPosition: {x: 2, y: 3.4794452, z: 6}
+      localEulerAngles: {x: -0, y: 180, z: 0}
+      lightType: 1
+      flickerMode: 1
     coinSpawns: []
     enemySpawns:
     - localPosition: {x: 2, y: 0.1, z: -4}
@@ -239,16 +257,16 @@ MonoBehaviour:
     playerSpawns: []
     hasExtractionPoint: 0
     extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: StorageDepot_755
-    roomLabel: StorageDepot_755
-    position: {x: 22, y: -6.880896e-10, z: 25}
-    rotation: {x: -0, y: 90, z: -0}
-    dimensions: {x: 12, y: 4, z: 12}
+  - roomId: ExtractionChamber_928
+    roomLabel: ExtractionChamber_928
+    position: {x: 10, y: -0.0000007575168, z: 36}
+    rotation: {x: 0, y: 270, z: 0}
+    dimensions: {x: 10, y: 4, z: 12}
     floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
     wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
     ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
     doorways:
-    - side: 1
+    - side: 3
       width: 3.2
       offset: 0
       hasDoor: 0
@@ -256,35 +274,21 @@ MonoBehaviour:
       doorStartsOpen: 0
     levers: []
     doors: []
-    props:
-    - propName: Pillar_1
-      localPosition: {x: -3.5, y: 2, z: 3.5}
-      localEulerAngles: {x: -0, y: 0, z: 0}
-      localScale: {x: 0.8, y: 4, z: 0.8}
-      color: {r: 0.3499999, g: 0.31999987, b: 0.29999992, a: 1}
-    - propName: Pillar_2
-      localPosition: {x: 3.5, y: 2, z: 3.5}
-      localEulerAngles: {x: -0, y: 0, z: 0}
-      localScale: {x: 0.8, y: 4, z: 0.8}
-      color: {r: 0.3499999, g: 0.31999987, b: 0.29999992, a: 1}
-    - propName: Pillar_3
-      localPosition: {x: -3.5, y: 2, z: -3.5}
-      localEulerAngles: {x: -0, y: 0, z: 0}
-      localScale: {x: 0.8, y: 4, z: 0.8}
-      color: {r: 0.3499999, g: 0.31999987, b: 0.29999992, a: 1}
-    - propName: Pillar_4
-      localPosition: {x: 3.5, y: 2, z: -3.5}
-      localEulerAngles: {x: -0, y: 0, z: 0}
-      localScale: {x: 0.8, y: 4, z: 0.8}
-      color: {r: 0.3499999, g: 0.31999987, b: 0.29999992, a: 1}
+    props: []
+    lights:
+    - fixtureName: EmergencyBulkhead_Amber
+      localPosition: {x: -5, y: 3.21477, z: 2.0000012}
+      localEulerAngles: {x: 0, y: 270, z: 0}
+      lightType: 1
+      flickerMode: 1
     coinSpawns: []
     enemySpawns: []
     playerSpawns: []
-    hasExtractionPoint: 0
-    extractionLocalPosition: {x: 0, y: 0, z: 0}
-  - roomId: ConnectingCorridor_539
-    roomLabel: ConnectingCorridor_539
-    position: {x: 10.18, y: -0.00000004639446, z: 11.93}
+    hasExtractionPoint: 1
+    extractionLocalPosition: {x: 0, y: 0.05, z: 0}
+  - roomId: ConnectingCorridor_921
+    roomLabel: ConnectingCorridor_921
+    position: {x: 0, y: -0.00000018937192, z: 36}
     rotation: {x: -0, y: 0, z: 0}
     dimensions: {x: 4, y: 4, z: 14}
     floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
@@ -306,6 +310,7 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
+    lights: []
     coinSpawns: []
     enemySpawns: []
     playerSpawns: []
@@ -335,6 +340,56 @@ MonoBehaviour:
     levers: []
     doors: []
     props: []
+    lights:
+    - fixtureName: CeilingLight_Fluorescent
+      localPosition: {x: 1.074, y: 3.8799999, z: 1}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      lightType: 0
+      flickerMode: 0
+    coinSpawns: []
+    enemySpawns: []
+    playerSpawns: []
+    hasExtractionPoint: 0
+    extractionLocalPosition: {x: 0, y: 0, z: 0}
+  - roomId: StorageDepot_755
+    roomLabel: StorageDepot_755
+    position: {x: 22, y: -6.880896e-10, z: 25}
+    rotation: {x: -0, y: 90, z: -0}
+    dimensions: {x: 12, y: 4, z: 12}
+    floorColor: {r: 0.25, g: 0.25, b: 0.28, a: 1}
+    wallColor: {r: 0.35, g: 0.32, b: 0.3, a: 1}
+    ceilingColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+    doorways:
+    - side: 1
+      width: 3.2
+      offset: 0
+      hasDoor: 0
+      doorChannel: 
+      doorStartsOpen: 0
+    levers: []
+    doors: []
+    props:
+    - propName: Pillar_1
+      localPosition: {x: -3.5, y: 2, z: 3.5}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      localScale: {x: 0.8, y: 4, z: 0.8}
+      color: {r: 0.8018868, g: 0.76784444, b: 0.76784444, a: 1}
+    - propName: Pillar_2
+      localPosition: {x: 3.5, y: 2, z: 3.5}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      localScale: {x: 0.8, y: 4, z: 0.8}
+      color: {r: 0.8018868, g: 0.76784444, b: 0.76784444, a: 1}
+    - propName: Pillar_3
+      localPosition: {x: -3.5, y: 2, z: -3.5}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      localScale: {x: 0.8, y: 4, z: 0.8}
+      color: {r: 0.8018868, g: 0.76784444, b: 0.76784444, a: 1}
+    - propName: Pillar_4
+      localPosition: {x: 3.5, y: 2, z: -3.5}
+      localEulerAngles: {x: -0, y: 0, z: 0}
+      localScale: {x: 0.8, y: 4, z: 0.8}
+      color: {r: 0.8018868, g: 0.76784444, b: 0.76784444, a: 1}
+    lights: []
     coinSpawns: []
     enemySpawns: []
     playerSpawns: []

@@ -71,6 +71,32 @@ public class DungeonBuilderEditor : Editor
         GUI.backgroundColor = Color.white;
         EditorGUILayout.EndHorizontal();
 
+        EditorGUILayout.Space(2f);
+        GUI.backgroundColor = new Color(0.95f, 0.75f, 0.2f);
+        if (GUILayout.Button("🎨 Apply Surface Materials & Tiling to Scene", GUILayout.Height(28f)))
+        {
+            builder.ApplyMaterialsToAllSceneSurfaces();
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+            if (SceneView.lastActiveSceneView != null)
+            {
+                SceneView.lastActiveSceneView.ShowNotification(new GUIContent("🎨 Applied Materials & Tiling!"));
+            }
+        }
+        GUI.backgroundColor = Color.white;
+
+        EditorGUILayout.Space(2f);
+        GUI.backgroundColor = new Color(0.25f, 0.35f, 0.5f);
+        if (GUILayout.Button("🌙 Apply Dark Atmosphere (Local Lighting Only)", GUILayout.Height(28f)))
+        {
+            DungeonLightingManager.ApplyDarkAtmosphere();
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+            if (SceneView.lastActiveSceneView != null)
+            {
+                SceneView.lastActiveSceneView.ShowNotification(new GUIContent("🌙 Applied Dark Local Lighting!"));
+            }
+        }
+        GUI.backgroundColor = Color.white;
+
         EditorGUILayout.EndVertical();
         EditorGUILayout.Space(6f);
 

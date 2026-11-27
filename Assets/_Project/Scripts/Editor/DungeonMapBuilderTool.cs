@@ -18,11 +18,23 @@ public class DungeonMapBuilderTool : EditorWindow
         Select = 0,
         Room = 1,
         Door = 2,
-        Lever = 3,
+        Prop = 3,
+        Lever = 3, // Backward compatibility alias
         Enemy = 4,
         ExtractionPad = 5,
         PlayerSpawn = 6,
         Erase = 7
+    }
+
+    public enum PropPlacementType
+    {
+        SecurityLever = 0,
+        FluorescentCeilingLight = 1,
+        WarmBunkerLight = 2,
+        EmergencyBulkheadLight = 3,
+        WarningStrobeRed = 4,
+        SupplyCrate = 5,
+        StorageLocker = 6
     }
 
     public enum ThematicRoomPreset
@@ -39,6 +51,8 @@ public class DungeonMapBuilderTool : EditorWindow
 
     // ── Tool State ───────────────────────────────────────────────────────────
     private BuilderToolMode currentMode = BuilderToolMode.Select;
+    private PropPlacementType selectedPropType = PropPlacementType.SecurityLever;
+    private LightFlickerMode selectedLightFlicker = LightFlickerMode.Steady;
     private ThematicRoomPreset roomPreset = ThematicRoomPreset.StartingHub_16x16;
     private Vector2 customRoomSize = new Vector2(10f, 10f);
     private float wallHeight = 4f;
@@ -185,7 +199,7 @@ public class DungeonMapBuilderTool : EditorWindow
         EditorGUILayout.EndHorizontal();
 
         EditorGUILayout.BeginHorizontal();
-        DrawToolButton("🕹️ Lever", BuilderToolMode.Lever, new Color(1f, 0.8f, 0.2f));
+        DrawToolButton("📦 Props (Lever/Light)", BuilderToolMode.Prop, new Color(1f, 0.8f, 0.2f));
         DrawToolButton("👾 Monster", BuilderToolMode.Enemy, new Color(1f, 0.4f, 0.4f));
         DrawToolButton("🎯 Extraction", BuilderToolMode.ExtractionPad, new Color(0.4f, 1f, 0.6f));
         EditorGUILayout.EndHorizontal();
@@ -249,10 +263,46 @@ public class DungeonMapBuilderTool : EditorWindow
                 EditorGUILayout.HelpBox("Click any doorway opening to place an unlockable blast door.", MessageType.None);
                 break;
 
-            case BuilderToolMode.Lever:
-                activeChannel = EditorGUILayout.TextField("Target Channel", activeChannel);
-                leverResetDelay = EditorGUILayout.FloatField("Reset Delay (0 = Toggle)", leverResetDelay);
-                EditorGUILayout.HelpBox("Click near any wall to place a lever automatically snapped flush against the wall.", MessageType.None);
+            case BuilderToolMode.Prop:
+                selectedPropType = (PropPlacementType)EditorGUILayout.EnumPopup("Prop Subtype", selectedPropType);
+                EditorGUILayout.Space(2f);
+
+                switch (selectedPropType)
+                {
+                    case PropPlacementType.SecurityLever:
+                        activeChannel = EditorGUILayout.TextField("Target Channel", activeChannel);
+                        leverResetDelay = EditorGUILayout.FloatField("Reset Delay (0 = Toggle)", leverResetDelay);
+                        EditorGUILayout.HelpBox("Click near any wall to place a lever automatically snapped flush against the wall.", MessageType.None);
+                        break;
+
+                    case PropPlacementType.FluorescentCeilingLight:
+                        selectedLightFlicker = (LightFlickerMode)EditorGUILayout.EnumPopup("Flicker Behavior", selectedLightFlicker);
+                        EditorGUILayout.HelpBox("Click near the ceiling to place an industrial fluorescent tube fixture casting real-time local light.", MessageType.None);
+                        break;
+
+                    case PropPlacementType.WarmBunkerLight:
+                        selectedLightFlicker = (LightFlickerMode)EditorGUILayout.EnumPopup("Flicker Behavior", selectedLightFlicker);
+                        EditorGUILayout.HelpBox("Click near the ceiling to place a warm tungsten bunker ceiling fixture.", MessageType.None);
+                        break;
+
+                    case PropPlacementType.EmergencyBulkheadLight:
+                        selectedLightFlicker = (LightFlickerMode)EditorGUILayout.EnumPopup("Flicker Behavior", selectedLightFlicker);
+                        EditorGUILayout.HelpBox("Click near any wall/doorway to place an amber emergency bulkhead cage light.", MessageType.None);
+                        break;
+
+                    case PropPlacementType.WarningStrobeRed:
+                        selectedLightFlicker = (LightFlickerMode)EditorGUILayout.EnumPopup("Flicker Behavior", selectedLightFlicker);
+                        EditorGUILayout.HelpBox("Click near any wall/ceiling to place a containment breach red strobe alert light.", MessageType.None);
+                        break;
+
+                    case PropPlacementType.SupplyCrate:
+                        EditorGUILayout.HelpBox("Click on the floor to place an industrial wooden cargo crate prop.", MessageType.None);
+                        break;
+
+                    case PropPlacementType.StorageLocker:
+                        EditorGUILayout.HelpBox("Click near any wall to place a facility metal storage locker prop.", MessageType.None);
+                        break;
+                }
                 break;
 
             case BuilderToolMode.Enemy:
@@ -343,14 +393,33 @@ public class DungeonMapBuilderTool : EditorWindow
 
             EditorGUILayout.Space(4f);
             GUI.backgroundColor = new Color(0.4f, 0.9f, 0.6f);
-            if (GUILayout.Button("🎨 Apply Materials to All Walls in Scene", GUILayout.Height(28f)))
+            if (GUILayout.Button("🎨 Apply Materials & Tiling to All Surfaces in Scene", GUILayout.Height(28f)))
             {
                 builder.ApplyMaterialsToAllSceneSurfaces();
                 EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
                 if (SceneView.lastActiveSceneView != null)
                 {
-                    SceneView.lastActiveSceneView.ShowNotification(new GUIContent("🎨 Applied Materials to All Walls!"));
+                    SceneView.lastActiveSceneView.ShowNotification(new GUIContent("🎨 Applied Materials & Tiling to All Surfaces!"));
                 }
+            }
+            GUI.backgroundColor = Color.white;
+
+            EditorGUILayout.Space(4f);
+            bool isDark = RenderSettings.ambientLight.grayscale < 0.05f;
+            GUI.backgroundColor = isDark ? new Color(1f, 0.85f, 0.3f) : new Color(0.25f, 0.35f, 0.5f);
+            string lightToggleBtn = isDark ? "💡 Switch to Bright Edit Mode" : "🌙 Switch to Dark Horror Atmosphere";
+            if (GUILayout.Button(lightToggleBtn, GUILayout.Height(26f)))
+            {
+                if (isDark)
+                {
+                    RenderSettings.ambientLight = new Color(0.4f, 0.4f, 0.45f);
+                    RenderSettings.ambientIntensity = 1f;
+                }
+                else
+                {
+                    DungeonLightingManager.ApplyDarkAtmosphere();
+                }
+                SceneView.RepaintAll();
             }
             GUI.backgroundColor = Color.white;
         }
@@ -542,7 +611,11 @@ public class DungeonMapBuilderTool : EditorWindow
         DrawSceneToolbarButton("Select", BuilderToolMode.Select);
         DrawSceneToolbarButton("Room", BuilderToolMode.Room);
         DrawSceneToolbarButton("Door", BuilderToolMode.Door);
-        DrawSceneToolbarButton("Lever", BuilderToolMode.Lever);
+        DrawSceneToolbarButton("Props", BuilderToolMode.Prop);
+        if (currentMode == BuilderToolMode.Prop)
+        {
+            selectedPropType = (PropPlacementType)EditorGUILayout.EnumPopup(selectedPropType, EditorStyles.toolbarDropDown, GUILayout.Width(140f));
+        }
         DrawSceneToolbarButton("Monster", BuilderToolMode.Enemy);
         DrawSceneToolbarButton("Extraction", BuilderToolMode.ExtractionPad);
         DrawSceneToolbarButton("Erase", BuilderToolMode.Erase);
@@ -726,10 +799,66 @@ public class DungeonMapBuilderTool : EditorWindow
                 Handles.matrix = savedDoorM;
                 break;
 
-            case BuilderToolMode.Lever:
-                Handles.color = new Color(1f, 0.85f, 0.2f, 0.95f);
-                Handles.DrawWireCube(pos + new Vector3(0f, 0.2f, 0f), new Vector3(0.5f, 0.65f, 0.4f));
-                Handles.DrawLine(pos, pos + rot * Vector3.forward * 0.8f);
+            case BuilderToolMode.Prop:
+                switch (selectedPropType)
+                {
+                    case PropPlacementType.SecurityLever:
+                        Handles.color = new Color(1f, 0.85f, 0.2f, 0.95f);
+                        Handles.DrawWireCube(pos + new Vector3(0f, 0.2f, 0f), new Vector3(0.5f, 0.65f, 0.4f));
+                        Handles.DrawLine(pos, pos + rot * Vector3.forward * 0.8f);
+                        break;
+
+                    case PropPlacementType.FluorescentCeilingLight:
+                        Vector3 fluorPos = new Vector3(pos.x, wallHeight - 0.12f, pos.z);
+                        Handles.color = new Color(0.7f, 0.92f, 1f, 0.95f);
+                        Matrix4x4 savedM1 = Handles.matrix;
+                        Handles.matrix = Matrix4x4.TRS(fluorPos, rot, Vector3.one);
+                        Handles.DrawWireCube(Vector3.zero, new Vector3(0.5f, 0.15f, 1.8f));
+                        Handles.matrix = savedM1;
+                        Handles.color = new Color(0.7f, 0.92f, 1f, 0.35f);
+                        Handles.DrawWireDisc(new Vector3(pos.x, 0.1f, pos.z), Vector3.up, 3.5f);
+                        break;
+
+                    case PropPlacementType.WarmBunkerLight:
+                        Vector3 warmPos = new Vector3(pos.x, wallHeight - 0.12f, pos.z);
+                        Handles.color = new Color(1f, 0.85f, 0.5f, 0.95f);
+                        Matrix4x4 savedM2 = Handles.matrix;
+                        Handles.matrix = Matrix4x4.TRS(warmPos, rot, Vector3.one);
+                        Handles.DrawWireCube(Vector3.zero, new Vector3(0.5f, 0.15f, 1.8f));
+                        Handles.matrix = savedM2;
+                        Handles.color = new Color(1f, 0.85f, 0.5f, 0.35f);
+                        Handles.DrawWireDisc(new Vector3(pos.x, 0.1f, pos.z), Vector3.up, 3.0f);
+                        break;
+
+                    case PropPlacementType.EmergencyBulkheadLight:
+                        Vector3 bulkPos = new Vector3(pos.x, Mathf.Clamp(pos.y > 0.5f ? pos.y : 2.5f, 1.2f, wallHeight - 0.4f), pos.z);
+                        Handles.color = new Color(1f, 0.55f, 0.15f, 0.95f);
+                        Handles.DrawWireCube(bulkPos, new Vector3(0.35f, 0.35f, 0.35f));
+                        Handles.color = new Color(1f, 0.55f, 0.15f, 0.35f);
+                        Handles.DrawWireDisc(bulkPos, normal, 1.8f);
+                        break;
+
+                    case PropPlacementType.WarningStrobeRed:
+                        Vector3 redPos = new Vector3(pos.x, Mathf.Clamp(pos.y > 0.5f ? pos.y : 2.5f, 1.2f, wallHeight - 0.4f), pos.z);
+                        Handles.color = new Color(1f, 0.2f, 0.15f, 0.95f);
+                        Handles.DrawWireCube(redPos, new Vector3(0.35f, 0.35f, 0.35f));
+                        Handles.color = new Color(1f, 0.2f, 0.15f, 0.35f);
+                        Handles.DrawWireDisc(redPos, normal, 2.0f);
+                        break;
+
+                    case PropPlacementType.SupplyCrate:
+                        Handles.color = new Color(0.65f, 0.45f, 0.25f, 0.9f);
+                        Handles.DrawWireCube(pos + Vector3.up * 0.6f, new Vector3(1.2f, 1.2f, 1.2f));
+                        break;
+
+                    case PropPlacementType.StorageLocker:
+                        Handles.color = new Color(0.3f, 0.4f, 0.45f, 0.9f);
+                        Matrix4x4 savedM3 = Handles.matrix;
+                        Handles.matrix = Matrix4x4.TRS(pos + Vector3.up * 1.5f, rot, Vector3.one);
+                        Handles.DrawWireCube(Vector3.zero, new Vector3(0.7f, 3.0f, 1.2f));
+                        Handles.matrix = savedM3;
+                        break;
+                }
                 break;
 
             case BuilderToolMode.Enemy:
@@ -841,8 +970,8 @@ public class DungeonMapBuilderTool : EditorWindow
                 PlaceDoor(parentObj, finalDoorPos, finalDoorRot);
                 break;
 
-            case BuilderToolMode.Lever:
-                PlaceLever(parentObj, pos, normal, rot);
+            case BuilderToolMode.Prop:
+                PlaceProp(parentObj, pos, normal, rot);
                 break;
 
             case BuilderToolMode.Enemy:
@@ -1071,6 +1200,23 @@ public class DungeonMapBuilderTool : EditorWindow
         room.SetDoorways(defs);
         room.RebuildWalls(wallHeight, doorWidth, wallCol);
 
+        // Spawn facility ceiling light fixture in placed room
+        Vector3 lightLocalPos = new Vector3(0f, wallHeight - 0.12f, 0f);
+        FacilityLightFixture.CreateFixture(
+            roomObj.transform,
+            "CeilingLight",
+            lightLocalPos,
+            Quaternion.identity,
+            FacilityLightType.FluorescentCeiling,
+            LightFlickerMode.Steady
+        );
+
+        DungeonBuilder builder = FindAnyObjectByType<DungeonBuilder>();
+        if (builder != null)
+        {
+            builder.ApplyMaterialsToAllSceneSurfaces();
+        }
+
         Undo.RegisterCreatedObjectUndo(roomObj, "Place Room");
         Selection.activeGameObject = roomObj;
     }
@@ -1095,6 +1241,101 @@ public class DungeonMapBuilderTool : EditorWindow
 
         Undo.RegisterCreatedObjectUndo(doorObj, "Place Blast Door");
         Selection.activeGameObject = doorObj;
+    }
+
+    private void PlaceProp(GameObject parent, Vector3 pos, Vector3 normal, Quaternion rot)
+    {
+        switch (selectedPropType)
+        {
+            case PropPlacementType.SecurityLever:
+                PlaceLever(parent, pos, normal, rot);
+                break;
+
+            case PropPlacementType.FluorescentCeilingLight:
+                Vector3 fluorPos = new Vector3(pos.x, wallHeight - 0.12f, pos.z);
+                GameObject fLight = FacilityLightFixture.CreateFixture(
+                    parent.transform,
+                    "CeilingLight_Fluorescent",
+                    parent.transform.InverseTransformPoint(fluorPos),
+                    Quaternion.Inverse(parent.transform.rotation) * rot,
+                    FacilityLightType.FluorescentCeiling,
+                    selectedLightFlicker
+                );
+                Undo.RegisterCreatedObjectUndo(fLight, "Place Fluorescent Light");
+                Selection.activeGameObject = fLight;
+                break;
+
+            case PropPlacementType.WarmBunkerLight:
+                Vector3 warmPos = new Vector3(pos.x, wallHeight - 0.12f, pos.z);
+                GameObject wLight = FacilityLightFixture.CreateFixture(
+                    parent.transform,
+                    "CeilingLight_Warm",
+                    parent.transform.InverseTransformPoint(warmPos),
+                    Quaternion.Inverse(parent.transform.rotation) * rot,
+                    FacilityLightType.WarmIncandescent,
+                    selectedLightFlicker
+                );
+                Undo.RegisterCreatedObjectUndo(wLight, "Place Warm Bunker Light");
+                Selection.activeGameObject = wLight;
+                break;
+
+            case PropPlacementType.EmergencyBulkheadLight:
+                Quaternion bRot = Mathf.Abs(normal.y) < 0.3f ? Quaternion.LookRotation(normal, Vector3.up) : rot;
+                Vector3 bPos = new Vector3(pos.x, Mathf.Clamp(pos.y > 0.5f ? pos.y : 2.5f, 1.2f, wallHeight - 0.4f), pos.z);
+                GameObject bLight = FacilityLightFixture.CreateFixture(
+                    parent.transform,
+                    "EmergencyBulkhead_Amber",
+                    parent.transform.InverseTransformPoint(bPos),
+                    Quaternion.Inverse(parent.transform.rotation) * bRot,
+                    FacilityLightType.EmergencyWallBulkhead,
+                    selectedLightFlicker
+                );
+                Undo.RegisterCreatedObjectUndo(bLight, "Place Bulkhead Light");
+                Selection.activeGameObject = bLight;
+                break;
+
+            case PropPlacementType.WarningStrobeRed:
+                Quaternion sRot = Mathf.Abs(normal.y) < 0.3f ? Quaternion.LookRotation(normal, Vector3.up) : rot;
+                Vector3 sPos = new Vector3(pos.x, Mathf.Clamp(pos.y > 0.5f ? pos.y : 2.5f, 1.2f, wallHeight - 0.4f), pos.z);
+                GameObject sLight = FacilityLightFixture.CreateFixture(
+                    parent.transform,
+                    "WarningStrobe_Red",
+                    parent.transform.InverseTransformPoint(sPos),
+                    Quaternion.Inverse(parent.transform.rotation) * sRot,
+                    FacilityLightType.WarningStrobeRed,
+                    selectedLightFlicker
+                );
+                Undo.RegisterCreatedObjectUndo(sLight, "Place Red Strobe");
+                Selection.activeGameObject = sLight;
+                break;
+
+            case PropPlacementType.SupplyCrate:
+                GameObject crate = CreatePrimitiveCube(
+                    parent.transform,
+                    $"Crate_{Random.Range(100, 999)}",
+                    parent.transform.InverseTransformPoint(pos + Vector3.up * 0.6f),
+                    new Vector3(1.2f, 1.2f, 1.2f),
+                    new Color(0.5f, 0.35f, 0.2f)
+                );
+                crate.transform.localRotation = Quaternion.Inverse(parent.transform.rotation) * rot;
+                Undo.RegisterCreatedObjectUndo(crate, "Place Crate Prop");
+                Selection.activeGameObject = crate;
+                break;
+
+            case PropPlacementType.StorageLocker:
+                Quaternion lRot = Mathf.Abs(normal.y) < 0.3f ? Quaternion.LookRotation(normal, Vector3.up) : rot;
+                GameObject locker = CreatePrimitiveCube(
+                    parent.transform,
+                    $"Locker_{Random.Range(100, 999)}",
+                    parent.transform.InverseTransformPoint(pos + Vector3.up * 1.5f),
+                    new Vector3(0.7f, 3.0f, 1.2f),
+                    new Color(0.2f, 0.25f, 0.28f)
+                );
+                locker.transform.localRotation = Quaternion.Inverse(parent.transform.rotation) * lRot;
+                Undo.RegisterCreatedObjectUndo(locker, "Place Locker Prop");
+                Selection.activeGameObject = locker;
+                break;
+        }
     }
 
     private void PlaceLever(GameObject parent, Vector3 pos, Vector3 normal, Quaternion defaultRot)
@@ -1461,14 +1702,18 @@ public class DungeonMapBuilderTool : EditorWindow
                     cName.StartsWith("Socket_") || cName.StartsWith("BlastDoor") ||
                     cName.StartsWith("Lever") ||
                     cName.StartsWith("Enemy") || cName.StartsWith("PlayerSpawn") ||
-                    cName == "ExtractionPoint")
+                    cName == "ExtractionPoint" ||
+                    cName.StartsWith("CeilingLight") || cName.StartsWith("EmergencyBulkhead") ||
+                    cName.StartsWith("WarningStrobe") || cName == "Housing" || cName == "Bulb" || cName == "LightSource")
                 {
                     continue;
                 }
 
                 if (child.GetComponent<DungeonDoor>() != null || child.GetComponent<DungeonLever>() != null ||
                     child.GetComponent<EnemyHealth>() != null ||
-                    child.GetComponent<ExtractionPoint>() != null)
+                    child.GetComponent<ExtractionPoint>() != null ||
+                    child.GetComponent<FacilityLightFixture>() != null ||
+                    child.GetComponentInParent<FacilityLightFixture>() != null)
                 {
                     continue;
                 }
@@ -1488,6 +1733,26 @@ public class DungeonMapBuilderTool : EditorWindow
                     col
                 ));
             }
+        }
+
+        // 8. Scan and save all Facility Light Fixtures in the scene
+        FacilityLightFixture[] lightFixtures = FindObjectsByType<FacilityLightFixture>(FindObjectsInactive.Exclude);
+        for (int lf = 0; lf < lightFixtures.Length; lf++)
+        {
+            FacilityLightFixture fixture = lightFixtures[lf];
+            DungeonRoom hostRoom = fixture.GetComponentInParent<DungeonRoom>() ?? FindClosestRoom(fixture.transform.position, sceneRooms);
+            RoomLayoutData rData = hostRoom != null ? roomDataMap[hostRoom] : fallbackRoom;
+
+            Vector3 localPos = hostRoom != null ? hostRoom.transform.InverseTransformPoint(fixture.transform.position) : fixture.transform.position;
+            Vector3 localEuler = hostRoom != null ? (Quaternion.Inverse(hostRoom.transform.rotation) * fixture.transform.rotation).eulerAngles : fixture.transform.eulerAngles;
+
+            rData.lights.Add(new LightFixturePlacementData(
+                fixture.name,
+                localPos,
+                localEuler,
+                fixture.FixtureType,
+                fixture.FlickerMode
+            ));
         }
 
         // Bind asset directly into scene's DungeonBuilder so it plays immediately!

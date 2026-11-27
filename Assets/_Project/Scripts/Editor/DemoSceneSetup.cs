@@ -51,16 +51,9 @@ public static class DemoSceneSetup
         }
 
         // === LIGHTING ===
-        GameObject lightObj = new GameObject("DungeonLight");
-        Light light = lightObj.AddComponent<Light>();
-        light.type = LightType.Directional;
-        light.intensity = 1.0f;
-        light.color = new Color(0.85f, 0.9f, 1f);
-        lightObj.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
-
-        // Ambient light (so the dungeon isn't pitch black)
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.15f, 0.12f, 0.1f);
+        // The facility relies entirely on local illumination (flashlights and light props).
+        // Global ambient and sun lights are removed for authentic subterranean horror darkness.
+        DungeonLightingManager.ApplyDarkAtmosphere();
 
         // === NETWORK MANAGER ===
         GameObject networkManagerObj = new GameObject("NetworkManager");
@@ -72,6 +65,7 @@ public static class DemoSceneSetup
         GameObject gameManagerObj = new GameObject("GameManager");
         gameManagerObj.AddComponent<NetworkObject>();
         gameManagerObj.AddComponent<GameManager>();
+        gameManagerObj.AddComponent<DungeonLightingManager>();
         gameManagerObj.AddComponent<DungeonBuilder>();
 
         // === UI (non-networked, scene objects) ===
@@ -98,12 +92,12 @@ public static class DemoSceneSetup
         }
         if (defaultList != null)
         {
-            networkManager.NetworkConfig.Prefabs.NetworkPrefabsLists.Add(defaultList);
+            if (!networkManager.NetworkConfig.Prefabs.NetworkPrefabsLists.Contains(defaultList))
+            {
+                networkManager.NetworkConfig.Prefabs.NetworkPrefabsLists.Add(defaultList);
+            }
         }
 
-        // Add barrel and enemy as network prefabs
-        networkManager.NetworkConfig.Prefabs.Add(new NetworkPrefab { Prefab = barrelPrefab });
-        networkManager.NetworkConfig.Prefabs.Add(new NetworkPrefab { Prefab = enemyPrefab });
         EditorUtility.SetDirty(networkManager);
 
         // === WIRE UP DUNGEON BUILDER ===

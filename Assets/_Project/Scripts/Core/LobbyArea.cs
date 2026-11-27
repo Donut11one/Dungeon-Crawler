@@ -264,6 +264,24 @@ public class LobbyArea : NetworkBehaviour
             new Vector3(6f, 0.8f, 0.1f),
             new Color(0.1f, 0.6f, 0.9f));
         sign.GetComponent<Collider>().enabled = false;
+
+        // Overhead bunker ceiling lighting
+        FacilityLightFixture.CreateFixture(
+            root,
+            "BunkerLight_North",
+            lobbyCenter + new Vector3(0f, wallHeight - 0.12f, 3.5f),
+            Quaternion.identity,
+            FacilityLightType.WarmIncandescent,
+            LightFlickerMode.Steady
+        );
+        FacilityLightFixture.CreateFixture(
+            root,
+            "BunkerLight_South",
+            lobbyCenter + new Vector3(0f, wallHeight - 0.12f, -3.5f),
+            Quaternion.identity,
+            FacilityLightType.WarmIncandescent,
+            LightFlickerMode.Steady
+        );
     }
 
     private void BuildDiveElevator(Transform root)
